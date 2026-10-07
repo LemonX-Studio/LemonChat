@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 // ── 网络层：所有请求走这里 ──
 // TODO 部署后把下面地址换成你的 Vercel 域名
-const val BASE_URL = "https://LEMON-你的名字.vercel.app/api"
+const val BASE_URL = "https://lemonchat-three.vercel.app/api"
 
 object Api {
     val client = OkHttpClient.Builder()
