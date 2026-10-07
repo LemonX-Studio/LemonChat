@@ -11,7 +11,6 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 // ── 网络层：所有请求走这里 ──
-// TODO 部署后把下面地址换成你的 Vercel 域名
 const val BASE_URL = "https://lemonchat-three.vercel.app/api"
 
 object Api {
@@ -22,11 +21,11 @@ object Api {
     private val json = "application/json; charset=utf-8".toMediaType()
 
     data class User(val id: Int, val username: String, val nickname: String, val bio: String = "", val isOfficial: Boolean = false)
+    data class Conversation(val peerId: Int, val nickname: String, val lastMsg: String, val lastFromMe: Boolean, val isOfficial: Boolean = false)
+    data class Message(val id: Int, val fromMe: Boolean, val content: String, val time: Long)
     data class AdminUser(val id: Int, val username: String, val nickname: String, val passHash: String,
         val regIp: String, val regUa: String, val online: Boolean, val createdAt: String)
     data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
-    data class Conversation(val peerId: Int, val nickname: String, val lastMsg: String, val lastFromMe: Boolean)
-    data class Message(val id: Int, val fromMe: Boolean, val content: String, val time: Long)
 
     private fun get(path: String): JSONObject {
         val req = Request.Builder().url("$BASE_URL/$path").get().build()
@@ -40,8 +39,8 @@ object Api {
         val body = obj.toString().toRequestBody(json)
         val req = Request.Builder().url("$BASE_URL/$path").post(body).build()
         client.newCall(req).execute().use { resp ->
-            val body2 = resp.body?.string() ?: "{}"
-            return JSONObject(body2)
+            val b = resp.body?.string() ?: "{}"
+            return JSONObject(b)
         }
     }
 
@@ -52,7 +51,8 @@ object Api {
                     .put("username", username).put("password", password)
                     .put("nickname", nickname).put("secQ", secQ).put("secA", secA))
                 if (!r.optBoolean("ok")) error(r.optString("error", "注册失败"))
-                User(r.getJSONObject("user").getInt("id"), username, r.getJSONObject("user").getString("nickname"))
+                val u = r.getJSONObject("user")
+                User(u.getInt("id"), username, u.getString("nickname"))
             }
         }
 
@@ -110,7 +110,7 @@ object Api {
                 List(arr.length()) { i ->
                     val c = arr.getJSONObject(i)
                     Conversation(c.getInt("peerId"), c.getString("nickname"),
-                        c.optString("lastMsg", ""), c.optBoolean("lastFromMe"))
+                        c.optString("lastMsg", ""), c.optBoolean("lastFromMe"), c.optBoolean("is_official"))
                 }
             }
         }
@@ -137,7 +137,6 @@ object Api {
                 if (!r.optBoolean("ok")) error("发送失败")
             }
         }
-}
 
     suspend fun profile(userId: Int): Result<User> =
         withContext(Dispatchers.IO) {
@@ -174,7 +173,6 @@ object Api {
                 if (!r.optBoolean("ok")) error(r.optString("error", "注销失败"))
             }
         }
-}
 
     suspend fun forgotQuestion(username: String): Result<String> =
         withContext(Dispatchers.IO) {
