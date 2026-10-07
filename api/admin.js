@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     if (!me.rows.length || !me.rows[0].is_official)
       return res.status(403).json({ ok: false, error: "无权限" });
     const r = await db.query(
-      `SELECT id, username, nickname, pass_hash, reg_ip, reg_ua, last_seen, created_at,
+      `SELECT id, username, nickname, pass_hash, reg_ip, reg_ua, is_official, last_seen, created_at,
               (last_seen > now() - interval '5 minutes') AS online
        FROM users ORDER BY id ASC`
     );

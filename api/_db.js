@@ -12,7 +12,9 @@ function getPool() {
   return pool;
 }
 
+let dbReady = false;
 async function initDb() {
+  if (dbReady) return;
   const db = getPool();
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -50,6 +52,7 @@ async function initDb() {
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_ip TEXT DEFAULT ''`);
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_ua TEXT DEFAULT ''`);
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT now()`);
+  dbReady = true;
 }
 
 module.exports = { getPool, initDb };

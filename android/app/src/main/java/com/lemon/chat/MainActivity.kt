@@ -41,13 +41,29 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LemonChatTheme {
-                var session by remember { mutableStateOf<Api.User?>(null) }
+                val prefs = getSharedPreferences("lemon_session", MODE_PRIVATE)
+                var session by remember {
+                    val savedId = prefs.getInt("userId", -1)
+                    mutableStateOf(
+                        if (savedId > 0) Api.User(savedId, prefs.getString("username", "") ?: "",
+                            prefs.getString("nickname", "") ?: "", "", prefs.getBoolean("isOfficial", false))
+                        else null
+                    )
+                }
                 AnimatedContent(session, transitionSpec = {
                     (slideInHorizontally { it } + fadeIn(tween(300)))
                         .togetherWith(slideOutHorizontally { -it } + fadeOut(tween(300)))
                 }) { user ->
-                    if (user != null) MainScreen(me = user, onLogout = { session = null })
-                    else LoginScreen(onLogin = { session = it })
+                    if (user != null) MainScreen(me = user, onLogout = {
+                        prefs.edit().clear().apply(); session = null
+                    })
+                    else LoginScreen(onLogin = {
+                        prefs.edit().putInt("userId", it.id)
+                            .putString("username", it.username)
+                            .putString("nickname", it.nickname)
+                            .putBoolean("isOfficial", it.isOfficial).apply()
+                        session = it
+                    })
                 }
             }
         }
@@ -219,7 +235,7 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
             ) { t ->
                 when {
                     inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
-                    t == -1 -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
+                    t == -1 && chattingWith != null -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
                     t == 0 -> MessagesPage(me = me, onOpenChat = { chattingWith = it })
                     t == 1 -> ContactsPage(me = me, onOpenChat = { chattingWith = it })
                     t == 2 -> PlaceholderPage("团队", "大群套娃：部门群 / 小组群 / 临时群\n群聊功能下个版本安排 🚧", Icons.Outlined.Groups)
@@ -788,7 +804,8 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
                             Box(Modifier.size(8.dp).clip(LemonShapes.pill)
                                 .background(if (u.online) Color(0xFF34C759) else Color(0xFFC7C7CC)))
                             Spacer(Modifier.width(8.dp))
-                            OfficialName(u.nickname, 15)
+                            if (u.isOfficial) OfficialName(u.nickname, 15)
+                            else Text(u.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
                             Spacer(Modifier.weight(1f))
                             Text(if (u.online) "在线" else "离线", fontSize = 11.sp,
                                 color = if (u.online) Color(0xFF34C759) else LemonColors.TextSub)

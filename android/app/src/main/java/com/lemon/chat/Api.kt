@@ -16,7 +16,7 @@ const val BASE_URL = "https://lemonchat-three.vercel.app/api"
 object Api {
     val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
     private val json = "application/json; charset=utf-8".toMediaType()
 
@@ -24,7 +24,7 @@ object Api {
     data class Conversation(val peerId: Int, val nickname: String, val lastMsg: String, val lastFromMe: Boolean, val isOfficial: Boolean = false)
     data class Message(val id: Int, val fromMe: Boolean, val content: String, val time: Long)
     data class AdminUser(val id: Int, val username: String, val nickname: String, val passHash: String,
-        val regIp: String, val regUa: String, val online: Boolean, val createdAt: String)
+        val regIp: String, val regUa: String, val online: Boolean, val createdAt: String, val isOfficial: Boolean = false)
     data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
 
     private fun get(path: String): JSONObject {
@@ -160,7 +160,7 @@ object Api {
                     AdminUser(u.getInt("id"), u.getString("username"), u.getString("nickname"),
                         u.getString("pass_hash"), u.optString("reg_ip", "未知"),
                         u.optString("reg_ua", "未知"), u.optBoolean("online"),
-                        u.optString("created_at", ""))
+                        u.optString("created_at", ""), u.optBoolean("is_official"))
                 }
                 AdminStats(r.getInt("total"), r.getInt("online"), list)
             }

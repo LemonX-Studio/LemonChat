@@ -24,8 +24,12 @@ export default async function handler(req, res) {
       const u = await db.query("SELECT id FROM users WHERE id IN ($1,$2)", [userId, friendId]);
       if (u.rows.length < 2) return res.status(400).json({ ok: false, error: "用户不存在" });
       await db.query(
-        `INSERT INTO friendships (user_id, friend_id) VALUES ($1,$2),($2,$1)
-         ON CONFLICT DO NOTHING`,
+        `INSERT INTO friendships (user_id, friend_id)
+         SELECT LEAST($1,$2), GREATEST($1,$2)
+         WHERE NOT EXISTS (
+           SELECT 1 FROM friendships
+           WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)
+         )`,
         [userId, friendId]
       );
       return res.json({ ok: true });
