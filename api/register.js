@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const salt = crypto.randomBytes(8).toString("hex");
     const r = await db.query(
       "INSERT INTO users (username, nickname, pass_hash, sec_q, sec_a) VALUES ($1,$2,$3,$4,$5) RETURNING id, nickname",
-      [username, nickname, hash(password, salt), secQ || "", secA || ""]
+      [username, nickname, salt + ":" + hash(password, salt), secQ || "", secA || ""]
     );
     res.json({ ok: true, user: { id: r.rows[0].id, nickname: r.rows[0].nickname } });
   } catch (e) {
