@@ -10,7 +10,7 @@ export default async function handler(req, res) {
       const userId = Number(req.query.userId);
       if (!userId) return res.status(400).json({ ok: false, error: "缺userId" });
       const r = await db.query(
-        `SELECT u.id, u.username, u.nickname FROM friendships f
+        `SELECT u.id, u.username, u.nickname, u.bio, u.is_official FROM friendships f
          JOIN users u ON u.id = (CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END)
          WHERE f.user_id=$1 OR f.friend_id=$1 ORDER BY u.id`,
         [userId]

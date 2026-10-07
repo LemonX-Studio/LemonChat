@@ -20,9 +20,11 @@ export default async function handler(req, res) {
     const exists = await db.query("SELECT id FROM users WHERE username=$1", [username]);
     if (exists.rows.length) return res.status(400).json({ ok: false, error: "用户名已被占用" });
     const salt = crypto.randomBytes(8).toString("hex");
+    const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "未知";
+    const ua = req.headers["user-agent"] || "未知设备";
     const r = await db.query(
-      "INSERT INTO users (username, nickname, pass_hash, sec_q, sec_a) VALUES ($1,$2,$3,$4,$5) RETURNING id, nickname",
-      [username, nickname, salt + ":" + hash(password, salt), secQ || "", secA || ""]
+      "INSERT INTO users (username, nickname, pass_hash, sec_q, sec_a, reg_ip, reg_ua) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, nickname",
+      [username, nickname, salt + ":" + hash(password, salt), secQ || "", secA || "", ip, ua]
     );
     res.json({ ok: true, user: { id: r.rows[0].id, nickname: r.rows[0].nickname } });
   } catch (e) {

@@ -22,6 +22,11 @@ async function initDb() {
       pass_hash TEXT NOT NULL,
       sec_q TEXT DEFAULT '',
       sec_a TEXT DEFAULT '',
+      bio TEXT DEFAULT '',
+      is_official BOOLEAN DEFAULT false,
+      reg_ip TEXT DEFAULT '',
+      reg_ua TEXT DEFAULT '',
+      last_seen TIMESTAMPTZ DEFAULT now(),
       created_at TIMESTAMPTZ DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS friendships (
@@ -39,6 +44,12 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT now()
     );
   `);
+  // 老库补列
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`);
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_official BOOLEAN DEFAULT false`);
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_ip TEXT DEFAULT ''`);
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reg_ua TEXT DEFAULT ''`);
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT now()`);
 }
 
 module.exports = { getPool, initDb };

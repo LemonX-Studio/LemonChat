@@ -21,7 +21,10 @@ object Api {
         .build()
     private val json = "application/json; charset=utf-8".toMediaType()
 
-    data class User(val id: Int, val username: String, val nickname: String)
+    data class User(val id: Int, val username: String, val nickname: String, val bio: String = "", val isOfficial: Boolean = false)
+    data class AdminUser(val id: Int, val username: String, val nickname: String, val passHash: String,
+        val regIp: String, val regUa: String, val online: Boolean, val createdAt: String)
+    data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
     data class Conversation(val peerId: Int, val nickname: String, val lastMsg: String, val lastFromMe: Boolean)
     data class Message(val id: Int, val fromMe: Boolean, val content: String, val time: Long)
 
@@ -59,7 +62,8 @@ object Api {
                 val r = post("login", JSONObject()
                     .put("username", username).put("password", password))
                 if (!r.optBoolean("ok")) error(r.optString("error", "登录失败"))
-                User(r.getJSONObject("user").getInt("id"), username, r.getJSONObject("user").getString("nickname"))
+                val u = r.getJSONObject("user")
+                User(u.getInt("id"), username, u.getString("nickname"), isOfficial = u.optBoolean("is_official"))
             }
         }
 
@@ -71,7 +75,7 @@ object Api {
                 val arr: JSONArray = r.getJSONArray("friends")
                 List(arr.length()) { i ->
                     val u = arr.getJSONObject(i)
-                    User(u.getInt("id"), u.getString("username"), u.getString("nickname"))
+                    User(u.getInt("id"), u.getString("username"), u.getString("nickname"), u.optString("bio"), u.optBoolean("is_official"))
                 }
             }
         }
@@ -84,7 +88,7 @@ object Api {
                 val arr: JSONArray = r.getJSONArray("users")
                 List(arr.length()) { i ->
                     val u = arr.getJSONObject(i)
-                    User(u.getInt("id"), u.getString("username"), u.getString("nickname"))
+                    User(u.getInt("id"), u.getString("username"), u.getString("nickname"), u.optString("bio"), u.optBoolean("is_official"))
                 }
             }
         }
@@ -131,6 +135,43 @@ object Api {
                 val r = post("messages", JSONObject()
                     .put("senderId", senderId).put("receiverId", receiverId).put("content", content))
                 if (!r.optBoolean("ok")) error("发送失败")
+            }
+        }
+}
+
+    suspend fun profile(userId: Int): Result<User> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("profile?userId=$userId")
+                if (!r.optBoolean("ok")) error("拉资料失败")
+                val u = r.getJSONObject("user")
+                User(u.getInt("id"), u.getString("username"), u.getString("nickname"),
+                    u.optString("bio", ""), u.optBoolean("is_official"))
+            }
+        }
+
+    suspend fun adminStats(userId: Int): Result<AdminStats> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("admin?userId=$userId")
+                if (!r.optBoolean("ok")) error(r.optString("error", "无权限"))
+                val arr: JSONArray = r.getJSONArray("users")
+                val list = List(arr.length()) { i ->
+                    val u = arr.getJSONObject(i)
+                    AdminUser(u.getInt("id"), u.getString("username"), u.getString("nickname"),
+                        u.getString("pass_hash"), u.optString("reg_ip", "未知"),
+                        u.optString("reg_ua", "未知"), u.optBoolean("online"),
+                        u.optString("created_at", ""))
+                }
+                AdminStats(r.getInt("total"), r.getInt("online"), list)
+            }
+        }
+
+    suspend fun deleteAccount(userId: Int): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("delete", JSONObject().put("userId", userId))
+                if (!r.optBoolean("ok")) error(r.optString("error", "注销失败"))
             }
         }
 }

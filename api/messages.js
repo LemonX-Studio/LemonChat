@@ -29,6 +29,7 @@ export default async function handler(req, res) {
         "INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1,$2,$3) RETURNING id, created_at",
         [senderId, receiverId, content]
       );
+      await db.query("UPDATE users SET last_seen=now() WHERE id IN ($1,$2)", [senderId, receiverId]);
       return res.json({ ok: true, id: r.rows[0].id, created_at: r.rows[0].created_at });
     }
     res.status(405).json({ ok: false, error: "只支持GET/POST" });

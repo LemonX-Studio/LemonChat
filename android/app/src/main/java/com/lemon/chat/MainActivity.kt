@@ -140,6 +140,25 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
     }
 }
 
+// ── 蓝V官方徽章 ──
+@Composable
+fun OfficialBadge(size: Int = 14) {
+    Icon(
+        Icons.Filled.Verified, "官方认证",
+        tint = Color(0xFF1D9BF0),
+        modifier = Modifier.size(size.dp)
+    )
+}
+
+@Composable
+fun OfficialName(name: String, fontSize: Int = 15, badge: Int = 14, fontWeight: androidx.compose.ui.text.font.FontWeight = FontWeight.SemiBold) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(name, fontSize = fontSize.sp, fontWeight = fontWeight, color = LemonColors.TextMain)
+        Spacer(Modifier.width(4.dp))
+        OfficialBadge(badge)
+    }
+}
+
 @Composable
 fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
@@ -165,6 +184,7 @@ fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChang
 fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
+    var inAdmin by remember { mutableStateOf(false) }
     val tabs = listOf(
         TabItem(Icons.Filled.ChatBubble, "消息"),
         TabItem(Icons.Filled.PeopleAlt, "通讯录"),
@@ -188,15 +208,16 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
                 }
             ) { t ->
                 when {
+                    inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
                     t == -1 -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
                     t == 0 -> MessagesPage(me = me, onOpenChat = { chattingWith = it })
-                    t == 1 -> ContactsPage(me = me)
+                    t == 1 -> ContactsPage(me = me, onOpenChat = { chattingWith = it })
                     t == 2 -> PlaceholderPage("团队", "大群套娃：部门群 / 小组群 / 临时群\n群聊功能下个版本安排 🚧", Icons.Outlined.Groups)
-                    else -> MePage(me = me, onLogout = onLogout)
+                    else -> MePage(me = me, onLogout = onLogout, onOpenAdmin = { inAdmin = true })
                 }
             }
 
-            if (chattingWith == null) {
+            if (chattingWith == null && !inAdmin) {
                 FloatingTabBar(
                     tabs = tabs,
                     selectedIndex = tab,
@@ -267,7 +288,7 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         ) { Text(c.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(c.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            if (c.isOfficial) OfficialName(c.nickname) else Text(c.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = LemonColors.TextMain)
                             Text(
                                 (if (c.lastFromMe) "我：" else "") + c.lastMsg,
                                 fontSize = 13.sp, color = LemonColors.TextSub, maxLines = 1
@@ -317,7 +338,8 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBackIosNew, "返回", tint = LemonColors.TextMain, modifier = Modifier.size(20.dp))
             }
-            Text(peer.nickname, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+            if (peer.isOfficial) OfficialName(peer.nickname, 18, 16, FontWeight.Bold)
+            else Text(peer.nickname, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
         }
 
         // 消息气泡
@@ -415,12 +437,13 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
 
 // ══════════════ 通讯录：好友列表 + 搜索加好友 ══════════════
 @Composable
-fun ContactsPage(me: Api.User) {
+fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var friends by remember { mutableStateOf<List<Api.User>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var showSearch by remember { mutableStateOf(false) }
+    var viewProfile by remember { mutableStateOf<Api.User?>(null) }
 
     fun load() {
         loading = true
@@ -464,7 +487,9 @@ fun ContactsPage(me: Api.User) {
             LazyColumn {
                 items(friends) { f ->
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth()
+                            .clickable { viewProfile = f }
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -473,13 +498,55 @@ fun ContactsPage(me: Api.User) {
                         ) { Text(f.nickname.take(1), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(f.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            if (f.isOfficial) OfficialName(f.nickname) else Text(f.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = LemonColors.TextMain)
                             Text("ID: ${f.username}", fontSize = 12.sp, color = LemonColors.TextSub)
                         }
                     }
                 }
             }
         }
+    }
+
+    // 好友资料卡
+    viewProfile?.let { p ->
+        AlertDialog(
+            onDismissRequest = { viewProfile = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                        contentAlignment = Alignment.Center) {
+                        Text(p.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        if (p.isOfficial) OfficialName(p.nickname, 17) else Text(p.nickname, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text("柠檬号 ${100000 + p.id}", fontSize = 11.sp, color = LemonColors.TextSub)
+                    }
+                }
+            },
+            text = {
+                Column {
+                    if (p.isOfficial) {
+                        Text("LemonX_Studio工作室创始人、LemonChat官方、LemonChat开发者",
+                            fontSize = 12.sp, color = Color(0xFF1D9BF0), fontWeight = FontWeight.SemiBold)
+                    } else if (p.bio.isNotEmpty()) {
+                        Text(p.bio, fontSize = 13.sp, color = LemonColors.TextSub)
+                    } else {
+                        Text("这个人很神秘，什么都没写", fontSize = 13.sp, color = LemonColors.TextSub)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewProfile = null; onOpenChat(p) },
+                    shape = LemonShapes.pill,
+                    colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green)) {
+                    Text("发消息", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewProfile = null }) { Text("关闭", color = LemonColors.TextSub) }
+            }
+        )
     }
 
     if (showSearch) {
@@ -523,7 +590,7 @@ fun ContactsPage(me: Api.User) {
                             ) { Text(u.nickname.take(1), fontSize = 16.sp, color = LemonColors.Green) }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(u.nickname, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                if (u.isOfficial) OfficialName(u.nickname, 14) else Text(u.nickname, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
                                 Text(u.username, fontSize = 11.sp, color = LemonColors.TextSub)
                             }
                             TextButton(onClick = {
@@ -549,7 +616,10 @@ fun ContactsPage(me: Api.User) {
 
 // ══════════════ 我的 ══════════════
 @Composable
-fun MePage(me: Api.User, onLogout: () -> Unit) {
+fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -560,13 +630,32 @@ fun MePage(me: Api.User, onLogout: () -> Unit) {
             contentAlignment = Alignment.Center
         ) { Text(me.nickname.take(1), fontSize = 36.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
         Spacer(Modifier.height(12.dp))
-        Text(me.nickname, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LemonColors.TextMain)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(me.nickname, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LemonColors.TextMain)
+            if (me.isOfficial) { Spacer(Modifier.width(6.dp)); OfficialBadge(20) }
+        }
         Text("账号：${me.username} · ID ${me.id}", fontSize = 13.sp, color = LemonColors.TextSub)
         Spacer(Modifier.height(6.dp))
         Text("柠檬号：${100000 + me.id}", fontSize = 13.sp, color = LemonColors.TextSub)
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(10.dp))
+        if (me.isOfficial) {
+            // 官方专属认证简介卡
+            Row(
+                Modifier.fillMaxWidth().clip(LemonShapes.card).background(Color(0xFFEAF6FF)).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OfficialBadge(18)
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text("LemonX_Studio工作室创始人、LemonChat官方、LemonChat开发者", fontSize = 12.sp, color = Color(0xFF1D9BF0), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        } else if (me.bio.isNotEmpty()) {
+            Text(me.bio, fontSize = 13.sp, color = LemonColors.TextSub, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(24.dp))
 
-        // 设置占位卡片
+        // 设置卡片
         listOf(
             Icons.Outlined.Notifications to "消息通知",
             Icons.Outlined.Lock to "账号与密保",
@@ -586,12 +675,140 @@ fun MePage(me: Api.User, onLogout: () -> Unit) {
                 Text(label, fontSize = 15.sp, color = LemonColors.TextMain)
             }
         }
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = onLogout) {
-            Text("退出登录", color = Color(0xFFD64545), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        // 官方号专属：管理后台入口
+        if (me.isOfficial) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .clip(LemonShapes.card)
+                    .background(Color(0xFFEAF6FF))
+                    .clickable { onOpenAdmin() }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.AdminPanelSettings, null, tint = Color(0xFF1D9BF0), modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("管理后台（官方专属）", fontSize = 15.sp, color = Color(0xFF1D9BF0), fontWeight = FontWeight.SemiBold)
+            }
         }
-        Text("Lemon Chat v0.1.0", fontSize = 11.sp, color = LemonColors.TextSub)
+        Spacer(Modifier.weight(1f))
+        // 退出登录（白）
+        Button(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            shape = LemonShapes.pill,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+        ) { Text("退出登录", color = LemonColors.TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(10.dp))
+        // 注销账号（红）
+        Button(
+            onClick = { showDeleteConfirm = true },
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            shape = LemonShapes.pill,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0x14D64545))
+        ) { Text("注销账号", color = Color(0xFFD64545), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        Text("Lemon Chat v0.1.1", fontSize = 11.sp, color = LemonColors.TextSub)
         Spacer(Modifier.height(80.dp))
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("注销账号", fontWeight = FontWeight.Bold) },
+            text = { Text("注销后你的账号、好友、所有聊天记录将被永久删除，无法恢复！确定要注销吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    scope.launch {
+                        Api.deleteAccount(me.id).onSuccess { onLogout() }
+                            .onFailure { e -> Toast.makeText(ctx, e.message ?: "注销失败", Toast.LENGTH_SHORT).show() }
+                    }
+                }) { Text("确定注销", color = Color(0xFFD64545), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("我再想想", color = LemonColors.TextSub) }
+            }
+        )
+    }
+}
+
+// ══════════════ 管理后台（官方号专属） ══════════════
+@Composable
+fun AdminPage(me: Api.User, onBack: () -> Unit) {
+    var stats by remember { mutableStateOf<Api.AdminStats?>(null) }
+    var error by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        Api.adminStats(me.id).onSuccess { stats = it }.onFailure { error = it.message ?: "加载失败" }
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBackIosNew, "返回", tint = LemonColors.TextMain, modifier = Modifier.size(20.dp))
+            }
+            Text("管理后台", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+        }
+        if (error.isNotEmpty()) {
+            Text("⚠️ $error", color = Color(0xFFD64545), modifier = Modifier.padding(20.dp))
+        } else if (stats == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = LemonColors.Green)
+            }
+        } else {
+            val st = stats!!
+            // 统计卡
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+                StatCard("注册总数", "${st.total}", Modifier.weight(1f))
+                Spacer(Modifier.width(12.dp))
+                StatCard("当前在线", "${st.online}", Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(6.dp))
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)) {
+                items(st.users) { u ->
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 5.dp)
+                            .clip(LemonShapes.card).background(Color.White).padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(LemonShapes.pill)
+                                .background(if (u.online) Color(0xFF34C759) else Color(0xFFC7C7CC)))
+                            Spacer(Modifier.width(8.dp))
+                            OfficialName(u.nickname, 15)
+                            Spacer(Modifier.weight(1f))
+                            Text(if (u.online) "在线" else "离线", fontSize = 11.sp,
+                                color = if (u.online) Color(0xFF34C759) else LemonColors.TextSub)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        InfoLine("ID", "${u.id} · ${u.username}")
+                        InfoLine("密码(加密)", u.passHash.take(24) + "…")
+                        InfoLine("注册时间", u.createdAt.take(19).replace("T", " "))
+                        InfoLine("注册IP", u.regIp)
+                        InfoLine("设备", u.regUa)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(LemonShapes.card).background(Color.White).padding(16.dp)
+    ) {
+        Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
+        Text(label, fontSize = 12.sp, color = LemonColors.TextSub)
+    }
+}
+
+@Composable
+fun InfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+        Text(label, fontSize = 11.sp, color = LemonColors.TextSub, modifier = Modifier.width(70.dp))
+        Text(value, fontSize = 11.sp, color = LemonColors.TextMain, maxLines = 1)
     }
 }
 

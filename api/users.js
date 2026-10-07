@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     const me = Number(req.query.me || 0);
     if (!q) return res.json({ ok: true, users: [] });
     const r = await db.query(
-      "SELECT id, username, nickname FROM users WHERE (username ILIKE $1 OR nickname ILIKE $1) AND id <> $2 LIMIT 10",
+      "SELECT id, username, nickname, bio, is_official FROM users WHERE (username ILIKE $1 OR nickname ILIKE $1) AND id <> $2 LIMIT 10",
       ["%" + q + "%", me]
     );
     res.json({ ok: true, users: r.rows });
