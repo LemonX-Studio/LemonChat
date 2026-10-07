@@ -175,3 +175,32 @@ object Api {
             }
         }
 }
+
+    suspend fun forgotQuestion(username: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("forgot?username=" + java.net.URLEncoder.encode(username, "UTF-8"))
+                if (!r.optBoolean("ok")) error(r.optString("error", "出错了"))
+                r.getString("secQ")
+            }
+        }
+
+    suspend fun resetBySecAnswer(username: String, secA: String, newPassword: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("forgot", JSONObject()
+                    .put("username", username).put("secA", secA).put("newPassword", newPassword))
+                if (!r.optBoolean("ok")) error(r.optString("error", "重置失败"))
+            }
+        }
+
+    suspend fun adminResetPassword(adminId: Int, targetId: Int): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("admin", JSONObject()
+                    .put("adminId", adminId).put("targetId", targetId))
+                if (!r.optBoolean("ok")) error(r.optString("error", "重置失败"))
+                r.getString("tempPassword")
+            }
+        }
+}

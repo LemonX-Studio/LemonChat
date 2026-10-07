@@ -67,6 +67,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
     var secA by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var showForgot by remember { mutableStateOf(false) }
 
     fun submit() {
         if (busy) return
@@ -129,12 +130,21 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
                 if (busy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                 else Text(if (isRegister) "注 册" else "登 录", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(4.dp))
+            if (!isRegister) {
+                TextButton(onClick = { showForgot = true }) {
+                    Text("忘记密码？", color = LemonColors.TextSub, fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.height(4.dp))
             TextButton(onClick = { isRegister = !isRegister; error = "" }) {
                 Text(
                     if (isRegister) "已有账号？去登录" else "没有账号？去注册",
                     color = LemonColors.Green, fontSize = 14.sp
                 )
+            }
+            if (showForgot) {
+                ForgotPasswordDialog(onDismiss = { showForgot = false })
             }
         }
     }
@@ -736,8 +746,10 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
 // ══════════════ 管理后台（官方号专属） ══════════════
 @Composable
 fun AdminPage(me: Api.User, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<Api.AdminStats?>(null) }
     var error by remember { mutableStateOf("") }
+    var resetResult by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         Api.adminStats(me.id).onSuccess { stats = it }.onFailure { error = it.message ?: "加载失败" }
     }
@@ -787,10 +799,30 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
                         InfoLine("注册时间", u.createdAt.take(19).replace("T", " "))
                         InfoLine("注册IP", u.regIp)
                         InfoLine("设备", u.regUa)
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    Api.adminResetPassword(me.id, u.id).onSuccess { temp ->
+                                        resetResult = "${u.nickname} 的新密码：$temp（只显示这一次，发给TA后让TA登录改密码）"
+                                    }.onFailure { e -> resetResult = "重置失败：${e.message}" }
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF1D9BF0))
+                        ) { Text("重置密码", fontSize = 12.sp) }
                     }
                 }
             }
         }
+    }
+    resetResult?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { resetResult = null },
+            title = { Text("重置成功", fontWeight = FontWeight.Bold) },
+            text = { Text(msg) },
+            confirmButton = { TextButton(onClick = { resetResult = null }) { Text("知道了", color = LemonColors.Green) } }
+        )
     }
 }
 
@@ -825,4 +857,70 @@ fun PlaceholderPage(title: String, subtitle: String, icon: androidx.compose.ui.g
         Spacer(Modifier.height(6.dp))
         Text(subtitle, fontSize = 13.sp, color = LemonColors.TextSub, textAlign = TextAlign.Center)
     }
+}
+
+// ══════════════ 忘记密码（密保重置） ══════════════
+@Composable
+fun ForgotPasswordDialog(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var step by remember { mutableStateOf(0) } // 0输用户名 1答密保 2成功
+    var username by remember { mutableStateOf("") }
+    var secQ by remember { mutableStateOf("") }
+    var answer by remember { mutableStateOf("") }
+    var newPw by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("找回密码", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                when (step) {
+                    0 -> {
+                        OutlinedTextField(value = username, onValueChange = { username = it },
+                            placeholder = { Text("输入你的用户名") }, singleLine = true,
+                            shape = LemonShapes.input,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
+                        if (error.isNotEmpty()) Text("⚠️ $error", color = Color(0xFFD64545), fontSize = 12.sp)
+                    }
+                    1 -> {
+                        Text("密保问题：$secQ", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(value = answer, onValueChange = { answer = it },
+                            placeholder = { Text("你的密保答案") }, singleLine = true,
+                            shape = LemonShapes.input,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(value = newPw, onValueChange = { newPw = it },
+                            placeholder = { Text("设置新密码（至少6位）") }, singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            shape = LemonShapes.input,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
+                        if (error.isNotEmpty()) Text("⚠️ $error", color = Color(0xFFD64545), fontSize = 12.sp)
+                    }
+                    2 -> Text("✅ 密码已重置！用新密码登录吧", color = Color(0xFF34A853), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (step == 2) { onDismiss(); return@Button }
+                    scope.launch {
+                        if (step == 0) {
+                            Api.forgotQuestion(username.trim()).onSuccess { secQ = it; error = ""; step = 1 }
+                                .onFailure { e -> error = e.message ?: "出错了" }
+                        } else {
+                            Api.resetBySecAnswer(username.trim(), answer, newPw).onSuccess { error = ""; step = 2 }
+                                .onFailure { e -> error = e.message ?: "重置失败" }
+                        }
+                    }
+                },
+                shape = LemonShapes.pill,
+                colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green)
+            ) { Text(if (step == 0) "下一步" else if (step == 1) "重置密码" else "完成", color = Color.White) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭", color = LemonColors.TextSub) }
+        }
+    )
 }
