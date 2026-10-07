@@ -5,11 +5,6 @@ export default async function handler(req, res) {
   try {
     await initDb();
     const db = getPool();
-    const userId = Number(req.query.userId);
-    if (!userId) return res.status(400).json({ ok: false, error: "缺userId" });
-    const me = await db.query("SELECT is_official FROM users WHERE id=$1", [userId]);
-    if (!me.rows.length || !me.rows[0].is_official)
-      return res.status(403).json({ ok: false, error: "无权限" });
     if (req.method === "POST") {
       // 管理员重置某用户密码：生成临时密码，仅此一次明文展示
       const { adminId, targetId } = req.body || {};
@@ -23,6 +18,11 @@ export default async function handler(req, res) {
       await db.query("UPDATE users SET pass_hash=$1 WHERE id=$2", [salt + ":" + h, Number(targetId)]);
       return res.json({ ok: true, tempPassword: temp });
     }
+    const userId = Number(req.query.userId);
+    if (!userId) return res.status(400).json({ ok: false, error: "缺userId" });
+    const me = await db.query("SELECT is_official FROM users WHERE id=$1", [userId]);
+    if (!me.rows.length || !me.rows[0].is_official)
+      return res.status(403).json({ ok: false, error: "无权限" });
     const r = await db.query(
       `SELECT id, username, nickname, pass_hash, reg_ip, reg_ua, last_seen, created_at,
               (last_seen > now() - interval '5 minutes') AS online
