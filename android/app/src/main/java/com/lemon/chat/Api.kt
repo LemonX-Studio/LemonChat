@@ -16,14 +16,15 @@ const val BASE_URL = "https://lemonchat-three.vercel.app/api"
 object Api {
     // 国内部分网络会对 vercel.app 做 DNS 污染（返回假IP），
     // 这里直接写死服务器的真实IP，绕过假路标。IP 若变更需更新。
-    private val trustedDns = okhttp3.Dns { hostname ->
-        if (hostname == "lemonchat-three.vercel.app") {
-            listOf(
-                java.net.InetAddress.getByName("64.29.17.131"),
-                java.net.InetAddress.getByName("216.198.79.131")
-            )
-        } else {
-            okhttp3.Dns.SYSTEM.lookup(hostname)
+    private val trustedDns = object : okhttp3.Dns {
+        override fun lookup(hostname: String): List<java.net.InetAddress> {
+            if (hostname == "lemonchat-three.vercel.app") {
+                return listOf(
+                    java.net.InetAddress.getByName("64.29.17.131"),
+                    java.net.InetAddress.getByName("216.198.79.131")
+                )
+            }
+            return okhttp3.Dns.SYSTEM.lookup(hostname)
         }
     }
 
