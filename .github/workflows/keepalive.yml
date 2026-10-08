@@ -9,6 +9,6 @@ jobs:
     steps:
       - name: Ping API
         run: |
-          curl -s -m 20 "https://lemonchat-three.vercel.app/api/profile?userId=1" > /dev/null
-          curl -s -m 20 "https://lemonchat-three.vercel.app/api/conversations?userId=1" > /dev/null
+          curl -s -m 20 "https://lemonchat.edgeone.cool/api/profile?userId=1" > /dev/null
+          curl -s -m 20 "https://lemonchat.edgeone.cool/api/conversations?userId=1" > /dev/null
           echo warmed
