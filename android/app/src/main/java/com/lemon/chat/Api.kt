@@ -13,12 +13,13 @@ import java.util.concurrent.TimeUnit
 // ── 网络层：所有请求走这里 ──
 // 2026-10-28 起后端迁至 Cloudflare Workers（EdgeOne 实名不互通弃用），带 WebSocket 实时推送
 const val BASE_URL = "https://lemonchat-server.xxbeimc.kdns.fr/api"
-// WebSocket 地址：由 BASE_URL 推导（wss://域名/ws）
-val WS_BASE: String get() = BASE_URL.removePrefix("https://").removePrefix("http://")
-    .let { if (it.endsWith("/api")) it.dropLast(4) else it }
-    .let { "wss://$it" }
 
 object Api {
+    // WebSocket 地址：由 BASE_URL 推导（wss://域名/ws）
+    val WS_BASE: String get() = BASE_URL.removePrefix("https://").removePrefix("http://")
+        .let { if (it.endsWith("/api")) it.dropLast(4) else it }
+        .let { "wss://$it" }
+
     val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
