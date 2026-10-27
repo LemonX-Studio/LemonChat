@@ -11,8 +11,12 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 // ── 网络层：所有请求走这里 ──
-// 2026-10-08 起后端迁至腾讯 EdgeOne Pages（vercel 被运营商 SNI 封锁）
-const val BASE_URL = "https://lemonchat.edgeone.cool/api"
+// 2026-10-28 起后端迁至 Cloudflare Workers（EdgeOne 实名不互通弃用），带 WebSocket 实时推送
+const val BASE_URL = "https://lemonchat-server.xxbeimc.kdns.fr/api"
+// WebSocket 地址：由 BASE_URL 推导（wss://域名/ws）
+val WS_BASE: String get() = BASE_URL.removePrefix("https://").removePrefix("http://")
+    .let { if (it.endsWith("/api")) it.dropLast(4) else it }
+    .let { "wss://$it" }
 
 object Api {
     val client = OkHttpClient.Builder()

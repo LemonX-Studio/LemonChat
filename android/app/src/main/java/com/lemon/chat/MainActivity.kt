@@ -271,6 +271,10 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
         }
     }
     LaunchedEffect(Unit) { load() }
+    // 实时门铃：收到新消息立刻刷新会话列表
+    LaunchedEffect(Unit) {
+        ChatSocket.events.collect { load() }
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -336,17 +340,29 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
     var input by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    var tick by remember { mutableStateOf(0) }   // 刷新信号：轮询/门铃都靠它触发
 
-    // 轮询新消息
+    // 15 秒轮询兜底（主力是 WebSocket 门铃）
     LaunchedEffect(peer.id) {
         while (true) {
-            Api.messages(me.id, peer.id).onSuccess { msgs ->
-                if (msgs != messages) {
-                    messages = msgs
-                    if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
-                }
+            delay(15000)
+            tick++
+        }
+    }
+    // 实时门铃：和当前聊天相关的消息立刻刷新
+    LaunchedEffect(peer.id) {
+        ChatSocket.start(me.id)
+        ChatSocket.events.collect { (from, to) ->
+            if (from == peer.id || to == peer.id) tick++
+        }
+    }
+    // 拉消息（tick 变化就拉一次）
+    LaunchedEffect(peer.id, tick) {
+        Api.messages(me.id, peer.id).onSuccess { msgs ->
+            if (msgs != messages) {
+                messages = msgs
+                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
             }
-            delay(2500)
         }
     }
 
