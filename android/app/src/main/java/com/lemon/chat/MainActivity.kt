@@ -15,6 +15,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.ModalBottomSheet
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -542,7 +544,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                             if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
                         }
                     }.onFailure { e ->
-                        errors = errors + ((e as? Api.ApiError)?.code ?: "" to text)
+                        errors = errors + listOf(((e as? Api.ApiError)?.code ?: "") to text)
                     }
                     sending = false
                 }
@@ -556,7 +558,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                             if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
                         }
                     }.onFailure { e ->
-                        errors = errors + ((e as? Api.ApiError)?.code ?: "" to data)
+                        errors = errors + listOf(((e as? Api.ApiError)?.code ?: "") to data)
                     }
                     sending = false
                 }
@@ -1080,6 +1082,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
 // ══════════════ 管理后台（官方号专属） ══════════════
 @Composable
 fun AdminPage(me: Api.User, onBack: () -> Unit) {
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<Api.AdminStats?>(null) }
     var error by remember { mutableStateOf("") }
