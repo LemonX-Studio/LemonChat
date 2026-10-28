@@ -227,7 +227,7 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
                 .background(LemonColors.Bg)
         ) {
             AnimatedContent(
-                if (chattingWith != null) -1 else tab,
+                if (chattingWith != null || inGroupChat != null) -1 else tab,
                 transitionSpec = {
                     val dir = if (targetState > initialState) 1 else -1
                     (slideInHorizontally { dir * it / 4 } + fadeIn(tween(250)))
