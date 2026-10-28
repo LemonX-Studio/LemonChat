@@ -40,8 +40,10 @@ object ChatSocket {
                         override fun onMessage(w: WebSocket, text: String) {
                             try {
                                 val j = JSONObject(text)
-                                if (j.optString("type") == "new_message") {
-                                    events.tryEmit(Pair(j.getInt("from"), j.getInt("to")))
+                                when (j.optString("type")) {
+                                    "new_message" -> events.tryEmit(Pair(j.getInt("from"), j.getInt("to")))
+                                    // 群消息用负数群号作第二个值：to = -groupId
+                                    "new_group_message" -> events.tryEmit(Pair(j.getInt("from"), -j.getInt("group")))
                                 }
                             } catch (_: Exception) {}
                         }

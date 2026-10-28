@@ -210,6 +210,7 @@ fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChang
 fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
+    var inGroupChat by remember { mutableStateOf<Api.Group?>(null) }
     var inAdmin by remember { mutableStateOf(false) }
     val tabs = listOf(
         TabItem(Icons.Filled.ChatBubble, "消息"),
@@ -235,15 +236,16 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
             ) { t ->
                 when {
                     inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
+                    t == -1 && inGroupChat != null -> GroupChatScreen(me = me, group = inGroupChat!!, onBack = { inGroupChat = null })
                     t == -1 && chattingWith != null -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
                     t == 0 -> MessagesPage(me = me, onOpenChat = { chattingWith = it })
                     t == 1 -> ContactsPage(me = me, onOpenChat = { chattingWith = it })
-                    t == 2 -> PlaceholderPage("团队", "大群套娃：部门群 / 小组群 / 临时群\n群聊功能下个版本安排 🚧", Icons.Outlined.Groups)
+                    t == 2 -> TeamsPage(me = me, onOpenGroup = { inGroupChat = it })
                     else -> MePage(me = me, onLogout = onLogout, onOpenAdmin = { inAdmin = true })
                 }
             }
 
-            if (chattingWith == null && !inAdmin) {
+            if (chattingWith == null && inGroupChat == null && !inAdmin) {
                 FloatingTabBar(
                     tabs = tabs,
                     selectedIndex = tab,
@@ -698,24 +700,63 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         Spacer(Modifier.height(24.dp))
 
         // 设置卡片
-        listOf(
-            Icons.Outlined.Notifications to "消息通知",
-            Icons.Outlined.Lock to "账号与密保",
-            Icons.Outlined.Info to "关于 Lemon Chat"
-        ).forEach { (icon, label) ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
-                    .clip(LemonShapes.card)
-                    .background(Color.White)
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(icon, null, tint = LemonColors.Green, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(label, fontSize = 15.sp, color = LemonColors.TextMain)
-            }
+        var showAbout by remember { mutableStateOf(false) }
+        var showSecInfo by remember { mutableStateOf(false) }
+        val prefs = remember { ctx.getSharedPreferences("lemon_settings", android.content.Context.MODE_PRIVATE) }
+        var notifyOn by remember { mutableStateOf(prefs.getBoolean("notify_enabled", true)) }
+
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                .background(Color.White).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Notifications, null, tint = LemonColors.Green, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("消息通知", fontSize = 15.sp, color = LemonColors.TextMain, modifier = Modifier.weight(1f))
+            Switch(
+                checked = notifyOn,
+                onCheckedChange = {
+                    notifyOn = it
+                    prefs.edit().putBoolean("notify_enabled", it).apply()
+                }
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                .background(Color.White).clickable { showSecInfo = true }.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Lock, null, tint = LemonColors.Green, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("账号与密保", fontSize = 15.sp, color = LemonColors.TextMain)
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                .background(Color.White).clickable { showAbout = true }.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Info, null, tint = LemonColors.Green, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            val vName = remember { try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (_: Exception) { "?" } }
+            Text("关于 Lemon Chat（v$vName）", fontSize = 15.sp, color = LemonColors.TextMain)
+        }
+
+        if (showSecInfo) {
+            AlertDialog(
+                onDismissRequest = { showSecInfo = false },
+                confirmButton = { TextButton(onClick = { showSecInfo = false }) { Text("知道了") } },
+                title = { Text("账号与密保", fontWeight = FontWeight.Bold) },
+                text = { Text("· 忘记密码：退出后在登录页点「忘记密码」，答对密保问题即可重置\n· 账号注销：本页最下方「注销账号」\n· 密保问题注册时设置，暂时无法修改") },
+            )
+        }
+        if (showAbout) {
+            val vName2 = remember { try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (_: Exception) { "?" } }
+            AlertDialog(
+                onDismissRequest = { showAbout = false },
+                confirmButton = { TextButton(onClick = { showAbout = false }) { Text("好的") } },
+                title = { Text("Lemon Chat", fontWeight = FontWeight.Bold) },
+                text = { Text("🍋 当前版本 v$vName2\n后端：Cloudflare Workers\n消息实时推送 · 单聊 · 群聊 · 好友 · 管理后台\n\n由 LemonX_Studio 出品") },
+            )
         }
         // 官方号专属：管理后台入口
         if (me.isOfficial) {
@@ -750,7 +791,8 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             shape = LemonShapes.pill,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0x14D64545))
         ) { Text("注销账号", color = Color(0xFFD64545), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
-        Text("Lemon Chat v0.1.1", fontSize = 11.sp, color = LemonColors.TextSub)
+        val appVer = remember { try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (_: Exception) { "?" } }
+        Text("Lemon Chat v$appVer", fontSize = 11.sp, color = LemonColors.TextSub)
         Spacer(Modifier.height(80.dp))
     }
 
@@ -956,4 +998,262 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("关闭", color = LemonColors.TextSub) }
         }
     )
+}
+
+// ══════════════ 团队页：群列表 ══════════════
+@Composable
+fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var groups by remember { mutableStateOf<List<Api.Group>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var showCreate by remember { mutableStateOf(false) }
+    var showJoin by remember { mutableStateOf(false) }
+
+    fun load() {
+        kotlinx.coroutines.MainScope().launch {
+            Api.groups(me.id).onSuccess { groups = it }
+            loading = false
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(Unit) {
+        ChatSocket.events.collect { (_, to) -> if (to < 0) load() }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 22.dp, top = 18.dp, bottom = 10.dp, end = 22.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("团队", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+            Row {
+                IconButton(onClick = { showJoin = true }) {
+                    Icon(Icons.Filled.GroupAdd, "加群", tint = LemonColors.Green)
+                }
+                IconButton(onClick = { showCreate = true }) {
+                    Icon(Icons.Filled.AddCircle, "建群", tint = LemonColors.Green)
+                }
+            }
+        }
+        if (loading && groups.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = LemonColors.Green)
+            }
+        } else if (groups.isEmpty()) {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Outlined.Groups, null, tint = LemonColors.Green, modifier = Modifier.size(64.dp))
+                Spacer(Modifier.height(14.dp))
+                Text("还没有群", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+                Text("右上角建个群，或输入群号加入 🍋", fontSize = 13.sp, color = LemonColors.TextSub)
+            }
+        } else {
+            LazyColumn(Modifier.padding(horizontal = 18.dp)) {
+                items(groups.size) { i ->
+                    val g = groups[i]
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                            .background(Color.White).clickable { onOpenGroup(g) }.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(46.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                            contentAlignment = Alignment.Center
+                        ) { Text(g.name.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(g.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                            Text("群号 ${g.id} · ${g.members} 人", fontSize = 12.sp, color = LemonColors.TextSub)
+                        }
+                        Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
+                    }
+                }
+                item { Spacer(Modifier.height(90.dp)) }
+            }
+        }
+    }
+
+    if (showCreate) {
+        var groupName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val n = groupName.trim()
+                    if (n.isNotEmpty()) {
+                        scope.launch {
+                            Api.createGroup(me.id, n).onSuccess { g ->
+                                showCreate = false; onOpenGroup(g)
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "建群失败", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }) { Text("创建", color = LemonColors.Green) }
+            },
+            dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消", color = LemonColors.TextSub) } },
+            title = { Text("建个新群", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = groupName, onValueChange = { groupName = it },
+                    label = { Text("群名称") }, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                )
+            }
+        )
+    }
+    if (showJoin) {
+        var joinId by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showJoin = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = joinId.trim().toIntOrNull()
+                    if (id != null) {
+                        scope.launch {
+                            Api.joinGroup(me.id, id).onSuccess {
+                                showJoin = false; load()
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "加群失败", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }) { Text("加入", color = LemonColors.Green) }
+            },
+            dismissButton = { TextButton(onClick = { showJoin = false }) { Text("取消", color = LemonColors.TextSub) } },
+            title = { Text("输入群号加群", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = joinId, onValueChange = { joinId = it },
+                    label = { Text("群号（纯数字）") }, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                )
+            }
+        )
+    }
+}
+
+// ══════════════ 群聊窗口 ══════════════
+@Composable
+fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var messages by remember { mutableStateOf<List<Api.GroupMessage>>(emptyList()) }
+    var input by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    var tick by remember { mutableStateOf(0) }
+
+    // 轮询兜底（门铃在线时不轮询）
+    LaunchedEffect(group.id) {
+        while (true) {
+            delay(15000)
+            if (!ChatSocket.online) tick++
+        }
+    }
+    // 实时门铃
+    LaunchedEffect(group.id) {
+        ChatSocket.start(me.id)
+        ChatSocket.events.collect { (_, to) -> if (to == -group.id) tick++ }
+    }
+    LaunchedEffect(group.id, tick) {
+        Api.groupMessages(group.id).onSuccess { msgs ->
+            if (msgs.map { it.id } != messages.map { it.id }) {
+                messages = msgs
+                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
+            }
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(LemonColors.GreenLight, LemonColors.Bg)))
+            .imePadding()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, top = 14.dp, bottom = 8.dp, end = 22.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBackIosNew, "返回", tint = LemonColors.TextMain, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+                Text("群号 ${group.id} · ${group.members} 人", fontSize = 11.sp, color = LemonColors.TextSub)
+            }
+        }
+
+        LazyColumn(
+            Modifier.weight(1f).padding(horizontal = 14.dp),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(messages.size) { i ->
+                val m = messages[i]
+                val mine = m.senderId == me.id
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = if (mine) Alignment.End else Alignment.Start
+                ) {
+                    if (!mine) Text(m.nickname, fontSize = 10.sp, color = LemonColors.TextSub, modifier = Modifier.padding(start = 6.dp, bottom = 2.dp))
+                    Box(
+                        Modifier
+                            .widthIn(max = 280.dp)
+                            .clip(LemonShapes.card)
+                            .background(if (mine) LemonColors.Green else Color.White)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(m.content, fontSize = 15.sp, color = if (mine) Color.White else LemonColors.TextMain)
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(8.dp)) }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = input, onValueChange = { input = it },
+                placeholder = { Text("说点什么…", fontSize = 14.sp, color = LemonColors.TextSub) },
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = LemonShapes.input,
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LemonColors.Green,
+                    unfocusedContainerColor = Color.White,
+                    focusedContainerColor = Color.White
+                )
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    val text = input.trim()
+                    if (text.isEmpty() || sending) return@Button
+                    sending = true
+                    scope.launch {
+                        Api.sendGroup(group.id, me.id, text).onSuccess {
+                            input = ""
+                            Api.groupMessages(group.id).onSuccess { msgs ->
+                                messages = msgs
+                                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
+                            }
+                        }.onFailure { e ->
+                            Toast.makeText(ctx, e.message ?: "发送失败", Toast.LENGTH_SHORT).show()
+                        }
+                        sending = false
+                    }
+                },
+                shape = LemonShapes.pill,
+                colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
+                modifier = Modifier.size(48.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Icon(Icons.Filled.Send, "发送", tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
 }

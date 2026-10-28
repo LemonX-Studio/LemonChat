@@ -32,6 +32,8 @@ object Api {
     data class AdminUser(val id: Int, val username: String, val nickname: String, val passHash: String,
         val regIp: String, val regUa: String, val online: Boolean, val createdAt: String, val isOfficial: Boolean = false)
     data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
+    data class Group(val id: Int, val name: String, val owner: String, val ownerId: Int, val members: Int)
+    data class GroupMessage(val id: Int, val senderId: Int, val content: String, val nickname: String, val time: Long)
 
     private fun get(path: String): JSONObject {
         val req = Request.Builder().url("$BASE_URL/$path").get().build()
@@ -205,6 +207,62 @@ object Api {
                     .put("adminId", adminId).put("targetId", targetId))
                 if (!r.optBoolean("ok")) error(r.optString("error", "重置失败"))
                 r.getString("tempPassword")
+            }
+        }
+
+    // ── 群聊 ──
+    suspend fun groups(userId: Int): Result<List<Group>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("groups?userId=$userId")
+                if (!r.optBoolean("ok")) error(r.optString("error", "拉群列表失败"))
+                val arr: JSONArray = r.getJSONArray("groups")
+                List(arr.length()) { i ->
+                    val g = arr.getJSONObject(i)
+                    Group(g.getInt("id"), g.getString("name"), g.getString("owner"),
+                        g.getInt("owner_id"), g.getInt("members"))
+                }
+            }
+        }
+
+    suspend fun createGroup(userId: Int, name: String): Result<Group> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("groups", JSONObject().put("userId", userId).put("name", name))
+                if (!r.optBoolean("ok")) error(r.optString("error", "建群失败"))
+                val g = r.getJSONObject("group")
+                Group(g.getInt("id"), g.getString("name"), "", userId, 1)
+            }
+        }
+
+    suspend fun joinGroup(userId: Int, groupId: Int): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("groups/join", JSONObject().put("userId", userId).put("groupId", groupId))
+                if (!r.optBoolean("ok")) error(r.optString("error", "加群失败"))
+            }
+        }
+
+    suspend fun groupMessages(groupId: Int, after: Int = 0): Result<List<GroupMessage>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("groupmessages?groupId=$groupId&after=$after")
+                if (!r.optBoolean("ok")) error(r.optString("error", "拉群消息失败"))
+                val arr: JSONArray = r.getJSONArray("messages")
+                List(arr.length()) { i ->
+                    val m = arr.getJSONObject(i)
+                    GroupMessage(m.getInt("id"), m.getInt("senderId"), m.getString("content"),
+                        m.getString("nickname"), m.getLong("time"))
+                }
+            }
+        }
+
+    suspend fun sendGroup(groupId: Int, senderId: Int, content: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("groupmessages", JSONObject()
+                    .put("groupId", groupId).put("senderId", senderId).put("content", content))
+                if (!r.optBoolean("ok")) error(r.optString("error", "发送失败"))
             }
         }
 }
