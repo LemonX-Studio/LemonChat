@@ -1,0 +1,7 @@
+R_DEF: Internal format may change without notice
+local
+color lemon_green
+drawable ic_launcher_fg
+mipmap ic_launcher
+string app_name
+style Theme.LemonChat

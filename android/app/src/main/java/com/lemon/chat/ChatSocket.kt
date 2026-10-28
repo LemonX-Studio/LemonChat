@@ -21,6 +21,7 @@ object ChatSocket {
 
     private var ws: WebSocket? = null
     private var connectedUserId = 0
+    @Volatile var online = false   // 门铃是否在线（在线时界面可以不轮询）
 
     @Synchronized
     fun start(userId: Int) {
@@ -35,6 +36,7 @@ object ChatSocket {
                         .pingInterval(25, TimeUnit.SECONDS)         // 保活心跳
                         .build()
                     ws = client.newWebSocket(req, object : WebSocketListener() {
+                        override fun onOpen(w: WebSocket, resp: Response) { online = true }
                         override fun onMessage(w: WebSocket, text: String) {
                             try {
                                 val j = JSONObject(text)
@@ -43,8 +45,9 @@ object ChatSocket {
                                 }
                             } catch (_: Exception) {}
                         }
-                        override fun onFailure(w: WebSocket, t: Throwable, resp: Response?) { ws = null }
-                        override fun onClosed(w: WebSocket, code: Int, reason: String) { ws = null }
+                        override fun onFailure(w: WebSocket, t: Throwable, resp: Response?) { online = false; ws = null }
+                        override fun onClosed(w: WebSocket, code: Int, reason: String) { online = false; ws = null }
+                        override fun onClosing(w: WebSocket, code: Int, reason: String) { online = false }
                     })
                     // 连着就等，断了再重连
                     while (ws != null) delay(1000)

@@ -342,11 +342,11 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
     val listState = rememberLazyListState()
     var tick by remember { mutableStateOf(0) }   // 刷新信号：轮询/门铃都靠它触发
 
-    // 15 秒轮询兜底（主力是 WebSocket 门铃）
+    // 轮询只当备胎：门铃在线就不轮询（省请求额度）
     LaunchedEffect(peer.id) {
         while (true) {
             delay(15000)
-            tick++
+            if (!ChatSocket.online) tick++
         }
     }
     // 实时门铃：和当前聊天相关的消息立刻刷新
