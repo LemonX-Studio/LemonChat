@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lemon.chat.ui.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -52,6 +53,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
+        val need = listOf(
+            android.Manifest.permission.CAMERA
+        ).filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(this, it) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (need.isNotEmpty()) {
+            androidx.core.app.ActivityCompat.requestPermissions(this, need.toTypedArray(), 100)
+        }
         setContent {
             LemonChatTheme {
                 val prefs = getSharedPreferences("lemon_session", MODE_PRIVATE)
@@ -214,7 +225,9 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
                         Toast.makeText(ctx, "未安装 Lemon 通行证APP", Toast.LENGTH_SHORT).show()
                     }
                 }) {
-                    Text("🔑 通行证登录", color = LemonColors.Green, fontSize = 13.sp)
+                    Icon(Icons.Filled.Key, null, tint = LemonColors.Green, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("通行证登录", color = LemonColors.Green, fontSize = 13.sp)
                 }
                 TextButton(onClick = { showForgot = true }) {
                     Text("忘记密码？", color = LemonColors.TextSub, fontSize = 13.sp)
@@ -279,6 +292,9 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
     var inGroupChat by remember { mutableStateOf<Api.Group?>(null) }
+    // 退出动画期间状态已清空，用快照让 outgoing 帧继续渲染聊天页（根治闪"我的"）
+    var lastChat by remember { mutableStateOf<Api.User?>(null) }
+    var lastGroup by remember { mutableStateOf<Api.Group?>(null) }
     var inAdmin by remember { mutableStateOf(false) }
     val ctxForKick = LocalContext.current
     LaunchedEffect(Unit) {
@@ -304,18 +320,19 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
             AnimatedContent(
                 if (chattingWith != null) -2 else if (inGroupChat != null) -3 else tab,
                 transitionSpec = {
-                    val dir = if (targetState > initialState) 1 else -1
-                    (slideInHorizontally { dir * it / 4 } + fadeIn(tween(250)))
-                        .togetherWith(slideOutHorizontally { -dir * it / 4 } + fadeOut(tween(250)))
+                    // 进入聊天：新页从右往左切入；退出：反向
+                    val dir = if (targetState > initialState) -1 else 1
+                    (slideInHorizontally { dir * it / 3 } + fadeIn(tween(220)))
+                        .togetherWith(slideOutHorizontally { -dir * it / 3 } + fadeOut(tween(220)))
                 }
             ) { t ->
                 when {
                     inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
-                    t == -2 && chattingWith != null -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
-                    t == -3 && inGroupChat != null -> GroupChatScreen(me = me, group = inGroupChat!!, onBack = { inGroupChat = null })
-                    t == 0 -> MessagesPage(me = me, onOpenChat = { chattingWith = it })
-                    t == 1 -> ContactsPage(me = me, onOpenChat = { chattingWith = it })
-                    t == 2 -> TeamsPage(me = me, onOpenGroup = { inGroupChat = it })
+                    t == -2 && lastChat != null -> ChatScreen(me = me, peer = lastChat!!, onBack = { chattingWith = null })
+                    t == -3 && lastGroup != null -> GroupChatScreen(me = me, group = lastGroup!!, onBack = { inGroupChat = null })
+                    t == 0 -> MessagesPage(me = me, onOpenChat = { lastChat = it; chattingWith = it })
+                    t == 1 -> ContactsPage(me = me, onOpenChat = { lastChat = it; chattingWith = it })
+                    t == 2 -> TeamsPage(me = me, onOpenGroup = { lastGroup = it; inGroupChat = it })
                     else -> MePage(me = me, onLogout = onLogout, onOpenAdmin = { inAdmin = true })
                 }
             }
@@ -588,8 +605,11 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
     fun load() {
         loading = true
         kotlinx.coroutines.MainScope().launch {
-            Api.friends(me.id).onSuccess { friends = it }
-            Api.friendRequests(me.id).onSuccess { reqCount = it.size }
+            // 并行拉好友和申请，省一半等待
+            val f = async { Api.friends(me.id) }
+            val r = async { Api.friendRequests(me.id) }
+            f.await().onSuccess { friends = it }
+            r.await().onSuccess { reqCount = it.size }
             loading = false
         }
     }

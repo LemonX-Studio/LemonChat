@@ -1,30 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 全新柠檬图标：斜放黄柠檬 + 绿叶 + 高光 -->
+<!-- 图标：绿色聊天气泡里抱着一颗黄柠檬，气泡带两个小圆点 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
 
-    <!-- 叶子 -->
+    <!-- 聊天气泡（白底绿边大圆泡 + 左下尾巴） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,26 C71.12,26 85,38.54 85,54 C85,69.46 71.12,82 54,82 C49.9,82 46,81.28 42.42,79.96 L30,84 L33.7,73.02 C29.18,68.16 23,61.62 23,54 C23,38.54 36.88,26 54,26 Z" />
+    <path
+        android:strokeColor="#34A853"
+        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,26 C71.12,26 85,38.54 85,54 C85,69.46 71.12,82 54,82 C49.9,82 46,81.28 42.42,79.96 L30,84 L33.7,73.02 C29.18,68.16 23,61.62 23,54 C23,38.54 36.88,26 54,26 Z" />
+
+    <!-- 柠檬（斜放，带叶子和高光） -->
     <path
         android:fillColor="#34A853"
-        android:pathData="M40,40 C44,30 56,28 62,32 C60,40 50,44 40,40 Z" />
-    <!-- 叶柄 -->
-    <path
-        android:fillColor="#2E8B47"
-        android:pathData="M52,36 L56,42 L53,43 L50,38 Z" />
-
-    <group android:rotation="-28" android:pivotX="54" android:pivotY="58">
-        <!-- 两端果蒂凸起 -->
-        <path android:fillColor="#FFD54F" android:pathData="M26,58 m-4.5,0 a4.5,4.5 0 1,1 9,0 a4.5,4.5 0 1,1 -9,0" />
-        <path android:fillColor="#FFD54F" android:pathData="M82,58 m-4.5,0 a4.5,4.5 0 1,1 9,0 a4.5,4.5 0 1,1 -9,0" />
-        <!-- 果身 -->
+        android:pathData="M43,40 C47,31.5 57.5,29.5 63,33 C61,40 51.5,43.5 43,40 Z" />
+    <group android:rotation="-28" android:pivotX="54" android:pivotY="60">
+        <path android:fillColor="#F2B705" android:pathData="M28,60 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+        <path android:fillColor="#F2B705" android:pathData="M80,60 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
         <path
             android:fillColor="#FFD84D"
-            android:pathData="M30,58 a24,15 0 1,0 48,0 a24,15 0 1,0 -48,0" />
-        <!-- 高光 -->
+            android:pathData="M32,60 a22,14 0 1,0 44,0 a22,14 0 1,0 -44,0" />
         <path
             android:fillColor="#FFFFFF"
-            android:fillAlpha="0.35"
-            android:pathData="M40,53 a11,5 0 1,0 14,3 a13,7 0 0,1 -14,-3 Z" />
+            android:fillAlpha="0.4"
+            android:pathData="M40,55.5 a10,4.5 0 1,0 13,2.5 a12,6 0 0,1 -13,-2.5 Z" />
     </group>
+
+    <!-- 气泡上两个小圆点（chat 标志） -->
+    <path android:fillColor="#34A853" android:pathData="M38,72 m-2.5,0 a2.5,2.5 0 1,1 5,0 a2.5,2.5 0 1,1 -5,0" />
+    <path android:fillColor="#34A853" android:pathData="M47,73.5 m-2.5,0 a2.5,2.5 0 1,1 5,0 a2.5,2.5 0 1,1 -5,0" />
 </vector>
