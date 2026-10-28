@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -148,6 +149,33 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
             }
             Spacer(Modifier.height(4.dp))
             if (!isRegister) {
+                // 通行证登录：跳转通行证APP确认后自动登录官方账号
+                val passLauncher = rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                ) { res ->
+                    if (res.resultCode == android.app.Activity.RESULT_OK) {
+                        val u = res.data?.getStringExtra("username") ?: return@rememberLauncherForActivityResult
+                        val p = res.data?.getStringExtra("password") ?: return@rememberLauncherForActivityResult
+                        busy = true; error = ""
+                        scope.launch {
+                            val result = Api.login(u, p)
+                            busy = false
+                            result.onSuccess { onLogin(it) }
+                                .onFailure { e -> error = e.message ?: "通行证登录失败" }
+                        }
+                    }
+                }
+                TextButton(onClick = {
+                    val intent = android.content.Intent("com.lemonchat.adminpassid.CONFIRM")
+                        .setPackage("com.lemonchat.adminpassid")
+                    try {
+                        passLauncher.launch(intent)
+                    } catch (_: Exception) {
+                        Toast.makeText(ctx, "未安装 Lemon 通行证APP", Toast.LENGTH_SHORT).show()
+                    }
+                }) {
+                    Text("🔑 通行证登录", color = LemonColors.Green, fontSize = 13.sp)
+                }
                 TextButton(onClick = { showForgot = true }) {
                     Text("忘记密码？", color = LemonColors.TextSub, fontSize = 13.sp)
                 }
@@ -784,8 +812,8 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = Color.White)
         ) { Text("退出登录", color = LemonColors.TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(10.dp))
-        // 注销账号（红）
-        Button(
+        // 注销账号（红）——官方账号不允许注销自己
+        if (!me.isOfficial) Button(
             onClick = { showDeleteConfirm = true },
             modifier = Modifier.fillMaxWidth().height(46.dp),
             shape = LemonShapes.pill,
