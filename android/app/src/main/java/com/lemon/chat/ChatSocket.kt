@@ -18,6 +18,8 @@ import java.util.concurrent.TimeUnit
 object ChatSocket {
     // 每条新消息发出一个 Pair(发送者id, 接收者id)
     val events = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 16)
+    // 被管理员强制下线
+    val forceLogout = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
 
     private var ws: WebSocket? = null
     private var connectedUserId = 0
@@ -44,6 +46,7 @@ object ChatSocket {
                                     "new_message" -> events.tryEmit(Pair(j.getInt("from"), j.getInt("to")))
                                     // 群消息用负数群号作第二个值：to = -groupId
                                     "new_group_message" -> events.tryEmit(Pair(j.getInt("from"), -j.getInt("group")))
+                                    "force_logout" -> forceLogout.tryEmit(Unit)
                                 }
                             } catch (_: Exception) {}
                         }

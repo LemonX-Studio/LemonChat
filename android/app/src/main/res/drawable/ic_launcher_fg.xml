@@ -1,9 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 全新柠檬图标：斜放黄柠檬 + 绿叶 + 高光 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M54,30 C70,30 80,41 80,55 C80,69 69,79 54,79 C50,79 46,78 43,76 L32,80 L36,69 C32,65 28,61 28,54 C28,41 39,30 54,30 Z" />
-    <path android:fillColor="#22A45D"
-        android:pathData="M44,52 m-3.5,0 a3.5,3.5 0 1,1 7,0 a3.5,3.5 0 1,1 -7,0 M64,52 m-3.5,0 a3.5,3.5 0 1,1 7,0 a3.5,3.5 0 1,1 -7,0 M40,62 C46,68 62,68 68,62 L66,66 C60,71 48,71 42,66 Z" />
+
+    <!-- 叶子 -->
+    <path
+        android:fillColor="#34A853"
+        android:pathData="M40,40 C44,30 56,28 62,32 C60,40 50,44 40,40 Z" />
+    <!-- 叶柄 -->
+    <path
+        android:fillColor="#2E8B47"
+        android:pathData="M52,36 L56,42 L53,43 L50,38 Z" />
+
+    <group android:rotation="-28" android:pivotX="54" android:pivotY="58">
+        <!-- 两端果蒂凸起 -->
+        <path android:fillColor="#FFD54F" android:pathData="M26,58 m-4.5,0 a4.5,4.5 0 1,1 9,0 a4.5,4.5 0 1,1 -9,0" />
+        <path android:fillColor="#FFD54F" android:pathData="M82,58 m-4.5,0 a4.5,4.5 0 1,1 9,0 a4.5,4.5 0 1,1 -9,0" />
+        <!-- 果身 -->
+        <path
+            android:fillColor="#FFD84D"
+            android:pathData="M30,58 a24,15 0 1,0 48,0 a24,15 0 1,0 -48,0" />
+        <!-- 高光 -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.35"
+            android:pathData="M40,53 a11,5 0 1,0 14,3 a13,7 0 0,1 -14,-3 Z" />
+    </group>
 </vector>

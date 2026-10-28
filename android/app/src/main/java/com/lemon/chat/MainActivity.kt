@@ -5,6 +5,16 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material3.ModalBottomSheet
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -85,6 +95,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var showForgot by remember { mutableStateOf(false) }
+    var banDays by remember { mutableStateOf(0) }
 
     fun submit() {
         if (busy) return
@@ -95,8 +106,35 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
             else Api.login(username.trim(), password)
             busy = false
             result.onSuccess { onLogin(it) }
-                .onFailure { e -> error = e.message ?: "网络出错了" }
+                .onFailure { e ->
+                    val msg = e.message ?: "网络出错了"
+                    if (msg.contains("已被封禁")) {
+                        banDays = Regex("\\d+").find(msg)?.value?.toIntOrNull() ?: 7
+                    } else error = msg
+                }
         }
+    }
+
+    if (banDays > 0) {
+        // 封禁提示页
+        Column(
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFD64545), Color(0xFF7A1F1F)))),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Filled.Block, null, tint = Color.White, modifier = Modifier.size(72.dp))
+            Spacer(Modifier.height(18.dp))
+            Text("您的账号已被封禁", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("剩余 $banDays 天", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
+            Spacer(Modifier.height(26.dp))
+            Button(
+                onClick = { banDays = 0 },
+                shape = LemonShapes.pill,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+            ) { Text("返回登录", color = Color(0xFFD64545), fontWeight = FontWeight.SemiBold) }
+        }
+        return
     }
 
     Box(
@@ -240,6 +278,13 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
     var inGroupChat by remember { mutableStateOf<Api.Group?>(null) }
     var inAdmin by remember { mutableStateOf(false) }
+    val ctxForKick = LocalContext.current
+    LaunchedEffect(Unit) {
+        ChatSocket.forceLogout.collect {
+            Toast.makeText(ctxForKick, "您的账号已被管理员强制下线", Toast.LENGTH_LONG).show()
+            onLogout()
+        }
+    }
     val tabs = listOf(
         TabItem(Icons.Filled.ChatBubble, "消息"),
         TabItem(Icons.Filled.PeopleAlt, "通讯录"),
@@ -255,7 +300,7 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
                 .background(LemonColors.Bg)
         ) {
             AnimatedContent(
-                if (chattingWith != null || inGroupChat != null) -1 else tab,
+                if (chattingWith != null) -2 else if (inGroupChat != null) -3 else tab,
                 transitionSpec = {
                     val dir = if (targetState > initialState) 1 else -1
                     (slideInHorizontally { dir * it / 4 } + fadeIn(tween(250)))
@@ -264,8 +309,8 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
             ) { t ->
                 when {
                     inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
-                    t == -1 && inGroupChat != null -> GroupChatScreen(me = me, group = inGroupChat!!, onBack = { inGroupChat = null })
-                    t == -1 && chattingWith != null -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
+                    t == -2 && chattingWith != null -> ChatScreen(me = me, peer = chattingWith!!, onBack = { chattingWith = null })
+                    t == -3 && inGroupChat != null -> GroupChatScreen(me = me, group = inGroupChat!!, onBack = { inGroupChat = null })
                     t == 0 -> MessagesPage(me = me, onOpenChat = { chattingWith = it })
                     t == 1 -> ContactsPage(me = me, onOpenChat = { chattingWith = it })
                     t == 2 -> TeamsPage(me = me, onOpenGroup = { inGroupChat = it })
@@ -362,38 +407,34 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
 }
 
 // ══════════════ 聊天窗口 ══════════════
+// ══════════════ 单聊窗口（新版） ══════════════
 @Composable
 fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
-    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.Message>>(emptyList()) }
-    var input by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
+    var myAvatar by remember { mutableStateOf("") }
+    // 发送失败列表：(错误码, 内容)
+    var errors by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var showRequest by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    var tick by remember { mutableStateOf(0) }   // 刷新信号：轮询/门铃都靠它触发
+    var tick by remember { mutableStateOf(0) }
 
-    // 轮询只当备胎：门铃在线就不轮询（省请求额度）
+    LaunchedEffect(Unit) { myAvatar = Api.AvatarStore.get(me.id) }
     LaunchedEffect(peer.id) {
-        while (true) {
-            delay(15000)
-            if (!ChatSocket.online) tick++
-        }
+        while (true) { delay(15000); if (!ChatSocket.online) tick++ }
     }
-    // 实时门铃：和当前聊天相关的消息立刻刷新
     LaunchedEffect(peer.id) {
         ChatSocket.start(me.id)
-        ChatSocket.events.collect { (from, to) ->
-            if (from == peer.id || to == peer.id) tick++
-        }
+        ChatSocket.events.collect { (from, to) -> if (from == peer.id || to == peer.id) tick++ }
     }
-    // 拉消息（tick 变化就拉一次）
     LaunchedEffect(peer.id, tick) {
         Api.messages(me.id, peer.id).onSuccess { msgs ->
-            if (msgs != messages) {
-                messages = msgs
-                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
-            }
-        }
+            messages = msgs
+            loaded = true
+            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
+        }.onFailure { loaded = true }
     }
 
     Column(
@@ -402,7 +443,6 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
             .background(Brush.verticalGradient(listOf(LemonColors.GreenLight, LemonColors.Bg)))
             .imePadding()
     ) {
-        // 顶栏
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -414,13 +454,18 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
             else Text(peer.nickname, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
         }
 
-        // 消息气泡
         LazyColumn(
             Modifier.weight(1f).padding(horizontal = 14.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (messages.isEmpty()) {
+            if (!loaded) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LemonColors.Green)
+                    }
+                }
+            } else if (messages.isEmpty() && errors.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
                         Text("打个招呼吧 👋", color = LemonColors.TextSub, fontSize = 14.sp)
@@ -428,82 +473,99 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                 }
             }
             items(messages) { m ->
+                val mine = m.fromMe
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start
+                    ) {
+                        if (!mine) {
+                            AvatarImg(m.senderId, m.nickname, m.avatar, 34, m.isOfficial)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Box(
+                            Modifier
+                                .widthIn(max = 250.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 18.dp, topEnd = 18.dp,
+                                        bottomStart = if (mine) 18.dp else 4.dp,
+                                        bottomEnd = if (mine) 4.dp else 18.dp
+                                    )
+                                )
+                                .background(if (mine) LemonColors.Green else Color.White)
+                                .padding(horizontal = 12.dp, vertical = 9.dp)
+                        ) { MsgContent(m.content, mine) }
+                        if (mine) {
+                            Spacer(Modifier.width(8.dp))
+                            AvatarImg(me.id, me.nickname, myAvatar, 34, me.isOfficial)
+                        }
+                    }
+                    if (!mine && !peer.isOfficial) {
+                        Text(m.nickname, fontSize = 10.sp, color = LemonColors.TextSub, modifier = Modifier.padding(start = 42.dp, top = 1.dp))
+                    }
+                }
+            }
+            items(errors.size) { i ->
+                val (code, content) = errors[i]
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (m.fromMe) Arrangement.End else Arrangement.Start
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        Modifier
-                            .widthIn(max = 280.dp)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 18.dp, topEnd = 18.dp,
-                                    bottomStart = if (m.fromMe) 18.dp else 4.dp,
-                                    bottomEnd = if (m.fromMe) 4.dp else 18.dp
-                                )
-                            )
-                            .background(if (m.fromMe) LemonColors.Green else Color.White)
-                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            m.content,
-                            color = if (m.fromMe) Color.White else LemonColors.TextMain,
-                            fontSize = 15.sp
-                        )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(if (code == "BLOCKED") "消息已发出，但被对方拒收了" else "您还不是对方的好友",
+                            fontSize = 10.sp, color = Color(0xFFD64545))
+                        if (code != "BLOCKED") {
+                            Text("添加好友",
+                                fontSize = 10.sp, color = LemonColors.Green,
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                                modifier = Modifier.clickable { showRequest = true })
+                        }
                     }
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Filled.Error, "发送失败", tint = Color(0xFFD64545), modifier = Modifier.size(16.dp))
                 }
             }
             item { Spacer(Modifier.height(6.dp)) }
         }
 
-        // 输入栏
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                placeholder = { Text("说点什么…", fontSize = 14.sp, color = LemonColors.TextSub) },
-                modifier = Modifier.weight(1f),
-                shape = LemonShapes.pill,
-                maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LemonColors.Green,
-                    unfocusedBorderColor = Color(0xFFDDE5E0),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
-                )
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    val text = input.trim()
-                    if (text.isEmpty() || sending) return@Button
-                    sending = true
-                    scope.launch {
-                        Api.send(me.id, peer.id, text).onSuccess {
-                            input = ""
-                            Api.messages(me.id, peer.id).onSuccess { msgs ->
-                                messages = msgs
-                                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
-                            }
-                        }.onFailure { e ->
-                            Toast.makeText(ctx, "发送失败", Toast.LENGTH_SHORT).show()
+        ChatInputRow(
+            sending = sending,
+            onSendText = { text ->
+                sending = true
+                scope.launch {
+                    Api.send(me.id, peer.id, text).onSuccess {
+                        errors = emptyList()
+                        Api.messages(me.id, peer.id).onSuccess { msgs ->
+                            messages = msgs
+                            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
                         }
-                        sending = false
+                    }.onFailure { e ->
+                        errors = errors + ((e as? Api.ApiError)?.code ?: "" to text)
                     }
-                },
-                shape = LemonShapes.pill,
-                colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
-                modifier = Modifier.size(48.dp),
-                contentPadding = PaddingValues(0.dp)
-            ) {
-                Icon(Icons.Filled.Send, "发送", tint = Color.White, modifier = Modifier.size(20.dp))
+                    sending = false
+                }
+            },
+            onSendImage = { data ->
+                sending = true
+                scope.launch {
+                    Api.send(me.id, peer.id, data).onSuccess {
+                        Api.messages(me.id, peer.id).onSuccess { msgs ->
+                            messages = msgs
+                            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
+                        }
+                    }.onFailure { e ->
+                        errors = errors + ((e as? Api.ApiError)?.code ?: "" to data)
+                    }
+                    sending = false
+                }
             }
-        }
+        )
+    }
+
+    if (showRequest) {
+        FriendRequestDialog(me, peer.username, onDismiss = { showRequest = false })
     }
 }
 
@@ -516,11 +578,16 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var showSearch by remember { mutableStateOf(false) }
     var viewProfile by remember { mutableStateOf<Api.User?>(null) }
+    var showRequests by remember { mutableStateOf(false) }
+    var reqCount by remember { mutableStateOf(0) }
+    var selectedFriend by remember { mutableStateOf<Api.User?>(null) }
+    var requestTarget by remember { mutableStateOf<Api.User?>(null) }
 
     fun load() {
         loading = true
         kotlinx.coroutines.MainScope().launch {
             Api.friends(me.id).onSuccess { friends = it }
+            Api.friendRequests(me.id).onSuccess { reqCount = it.size }
             loading = false
         }
     }
@@ -557,17 +624,39 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
             }
         } else {
             LazyColumn {
+                // 申请消息入口（微信式）
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
+                            .clip(LemonShapes.card).background(Color(0xFFEAF6FF))
+                            .clickable { showRequests = true }.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.MarkEmailUnread, null, tint = Color(0xFF1D9BF0), modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("申请消息", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1D9BF0))
+                        Spacer(Modifier.weight(1f))
+                        if (reqCount > 0) {
+                            Box(
+                                Modifier.clip(CircleShape).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) { Text("$reqCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        }
+                        Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
+                    }
+                }
                 items(friends) { f ->
                     Row(
                         Modifier.fillMaxWidth()
-                            .clickable { viewProfile = f }
+                            .pointerInput(f.id) {
+                                detectTapGestures(
+                                    onTap = { viewProfile = f },
+                                    onLongPress = { selectedFriend = f }
+                                )
+                            }
                             .padding(horizontal = 18.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier.size(46.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
-                            contentAlignment = Alignment.Center
-                        ) { Text(f.nickname.take(1), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
+                        AvatarImg(f.id, f.nickname, f.avatar, 46, f.isOfficial)
                         Spacer(Modifier.width(12.dp))
                         Column {
                             if (f.isOfficial) OfficialName(f.nickname) else Text(f.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = LemonColors.TextMain)
@@ -665,15 +754,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                                 if (u.isOfficial) OfficialName(u.nickname, 14) else Text(u.nickname, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
                                 Text(u.username, fontSize = 11.sp, color = LemonColors.TextSub)
                             }
-                            TextButton(onClick = {
-                                scope.launch {
-                                    Api.addFriend(me.id, u.id).onSuccess {
-                                        Toast.makeText(ctx, "已添加 ${u.nickname}", Toast.LENGTH_SHORT).show()
-                                        load()
-                                        showSearch = false
-                                    }
-                                }
-                            }) { Text("添加", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
+                            TextButton(onClick = { requestTarget = u }) { Text("添加", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
@@ -683,6 +764,91 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                 TextButton(onClick = { showSearch = false }) { Text("关闭", color = LemonColors.TextSub) }
             }
         )
+    }
+
+    // 好友申请列表
+    if (showRequests) {
+        var requests by remember { mutableStateOf<List<Api.FriendRequest>?>(null) }
+        LaunchedEffect(Unit) {
+            Api.friendRequests(me.id).onSuccess { requests = it; reqCount = it.size }
+        }
+        AlertDialog(
+            onDismissRequest = { showRequests = false },
+            title = { Text("申请消息", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    if (requests == null) {
+                        CircularProgressIndicator(color = LemonColors.Green, modifier = Modifier.size(28.dp))
+                    } else if (requests!!.isEmpty()) {
+                        Text("暂无好友申请", fontSize = 14.sp, color = LemonColors.TextSub)
+                    } else {
+                        requests!!.forEach { r ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    if (r.isOfficial) OfficialName(r.nickname, 14)
+                                    else Text(r.nickname, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                                    Text(r.message.ifEmpty { "请求加你为好友" }, fontSize = 12.sp, color = LemonColors.TextSub)
+                                }
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        Api.acceptFriendRequest(me.id, r.id).onSuccess {
+                                            Toast.makeText(ctx, "已通过 ${r.nickname} 的申请", Toast.LENGTH_SHORT).show()
+                                            load(); showRequests = false
+                                        }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                    }
+                                }) { Text("通过", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        Api.rejectFriendRequest(me.id, r.id).onSuccess { load() }
+                                    }
+                                }) { Text("拒绝", color = LemonColors.TextSub) }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showRequests = false }) { Text("关闭", color = LemonColors.TextSub) } }
+        )
+    }
+
+    // 长按好友：删除 / 拉黑
+    if (selectedFriend != null) {
+        val f = selectedFriend!!
+        AlertDialog(
+            onDismissRequest = { selectedFriend = null },
+            title = { Text(f.nickname, fontWeight = FontWeight.Bold) },
+            text = { Text("选择要执行的操作", fontSize = 13.sp, color = LemonColors.TextSub) },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = {
+                        scope.launch {
+                            Api.deleteFriend(me.id, f.id).onSuccess {
+                                Toast.makeText(ctx, "已删除好友", Toast.LENGTH_SHORT).show()
+                                selectedFriend = null; load()
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                        }
+                    }) { Text("删除好友", color = Color(0xFFD64545)) }
+                    TextButton(onClick = {
+                        scope.launch {
+                            Api.blockUser(me.id, f.id).onSuccess {
+                                Toast.makeText(ctx, "已加入黑名单", Toast.LENGTH_SHORT).show()
+                                selectedFriend = null; load()
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                        }
+                    }) { Text("加入黑名单", color = Color(0xFFD64545)) }
+                    TextButton(onClick = { selectedFriend = null }) { Text("取消", color = LemonColors.TextSub) }
+                }
+            }
+        )
+    }
+
+    // 发送好友申请
+    if (requestTarget != null) {
+        FriendRequestDialog(me, requestTarget!!.username, onDismiss = { requestTarget = null; load() })
     }
 }
 
@@ -697,10 +863,31 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(40.dp))
+        var myAvatar by remember { mutableStateOf(me.avatar) }
+        LaunchedEffect(Unit) { myAvatar = Api.AvatarStore.get(me.id) }
+        val avatarPicker = rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+        ) { uri -> uri?.let { u ->
+            val data = compressImage(ctx, u)
+            if (data != null) {
+                scope.launch {
+                    Api.setAvatar(me.id, data).onSuccess {
+                        myAvatar = data
+                        Toast.makeText(ctx, "头像已更新", Toast.LENGTH_SHORT).show()
+                    }.onFailure { e -> Toast.makeText(ctx, e.message ?: "设置失败", Toast.LENGTH_SHORT).show() }
+                }
+            } else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
+        } }
         Box(
-            Modifier.size(84.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+            Modifier.size(84.dp).clip(LemonShapes.pill).clickable {
+                avatarPicker.launch(androidx.activity.result.PickVisualMediaRequest(
+                    androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }.background(LemonColors.GreenLight),
             contentAlignment = Alignment.Center
-        ) { Text(me.nickname.take(1), fontSize = 36.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
+        ) {
+            AvatarImg(me.id, me.nickname, myAvatar, 84, me.isOfficial)
+        }
+        Text("点头像可更换", fontSize = 10.sp, color = LemonColors.TextSub)
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(me.nickname, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LemonColors.TextMain)
@@ -730,6 +917,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         // 设置卡片
         var showAbout by remember { mutableStateOf(false) }
         var showSecInfo by remember { mutableStateOf(false) }
+        var showBlacklist by remember { mutableStateOf(false) }
         val prefs = remember { ctx.getSharedPreferences("lemon_settings", android.content.Context.MODE_PRIVATE) }
         var notifyOn by remember { mutableStateOf(prefs.getBoolean("notify_enabled", true)) }
 
@@ -786,6 +974,50 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
                 text = { Text("🍋 当前版本 v$vName2\n后端：Cloudflare Workers\n消息实时推送 · 单聊 · 群聊 · 好友 · 管理后台\n\n由 LemonX_Studio 出品") },
             )
         }
+        // 黑名单列表
+        if (showBlacklist) {
+            var blocked by remember { mutableStateOf<List<Api.User>?>(null) }
+            LaunchedEffect(Unit) { Api.listBlocked(me.id).onSuccess { blocked = it } }
+            AlertDialog(
+                onDismissRequest = { showBlacklist = false },
+                title = { Text("黑名单", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        if (blocked == null) CircularProgressIndicator(color = LemonColors.Green, modifier = Modifier.size(28.dp))
+                        else if (blocked!!.isEmpty()) Text("黑名单是空的", fontSize = 14.sp, color = LemonColors.TextSub)
+                        else blocked!!.forEach { u ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(u.nickname, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), color = LemonColors.TextMain)
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        Api.unblockUser(me.id, u.id).onSuccess {
+                                            Toast.makeText(ctx, "已解除拉黑", Toast.LENGTH_SHORT).show()
+                                            Api.listBlocked(me.id).onSuccess { blocked = it }
+                                        }
+                                    }
+                                }) { Text("解除", color = LemonColors.Green) }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = { TextButton(onClick = { showBlacklist = false }) { Text("关闭", color = LemonColors.TextSub) } }
+            )
+        }
+        // 黑名单
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                .background(Color.White).clickable { showBlacklist = true }.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Block, null, tint = Color(0xFFD64545), modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("黑名单", fontSize = 15.sp, color = LemonColors.TextMain)
+        }
+
         // 官方号专属：管理后台入口
         if (me.isOfficial) {
             Row(
@@ -914,6 +1146,32 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                             colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF1D9BF0))
                         ) { Text("重置密码", fontSize = 12.sp) }
+                        if (!u.isOfficial) Row {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        Api.adminKick(me.id, u.id).onSuccess {
+                                            Toast.makeText(ctx, "已强制下线 ${u.nickname}", Toast.LENGTH_SHORT).show()
+                                            Api.adminStats(me.id).onSuccess { stats = it }
+                                        }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD64545))
+                            ) { Text("下线", fontSize = 12.sp) }
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        Api.adminBan(me.id, u.id, 7).onSuccess {
+                                            Toast.makeText(ctx, "已封禁 ${u.nickname} 7 天", Toast.LENGTH_SHORT).show()
+                                            Api.adminStats(me.id).onSuccess { stats = it }
+                                        }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD64545))
+                            ) { Text("封禁7天", fontSize = 12.sp) }
+                        }
                     }
                 }
             }
@@ -1037,6 +1295,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var showCreate by remember { mutableStateOf(false) }
     var showJoin by remember { mutableStateOf(false) }
+    var selectedGroup by remember { mutableStateOf<Api.Group?>(null) }
 
     fun load() {
         kotlinx.coroutines.MainScope().launch {
@@ -1086,7 +1345,13 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                     val g = groups[i]
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
-                            .background(Color.White).clickable { onOpenGroup(g) }.padding(14.dp),
+                            .background(Color.White)
+                            .pointerInput(g.id) {
+                                detectTapGestures(
+                                    onTap = { onOpenGroup(g) },
+                                    onLongPress = { selectedGroup = g }
+                                )
+                            }.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -1160,38 +1425,71 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
             }
         )
     }
+
+    // 长按群：进入 / 退出 / 解散（群主）
+    if (selectedGroup != null) {
+        val g = selectedGroup!!
+        val isOwner = g.ownerId == me.id
+        AlertDialog(
+            onDismissRequest = { selectedGroup = null },
+            title = { Text(g.name, fontWeight = FontWeight.Bold) },
+            text = { Text("群号 ${g.id} · ${g.members} 人\n长按群可管理", fontSize = 13.sp, color = LemonColors.TextSub) },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = { selectedGroup = null; onOpenGroup(g) }) { Text("进入群聊", color = LemonColors.Green) }
+                    TextButton(onClick = {
+                        if (isOwner) Toast.makeText(ctx, "群主不能退出，请解散群聊", Toast.LENGTH_SHORT).show()
+                        else scope.launch {
+                            Api.groupLeave(me.id, g.id).onSuccess {
+                                Toast.makeText(ctx, "已退出群聊", Toast.LENGTH_SHORT).show()
+                                selectedGroup = null; load()
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                        }
+                    }) { Text("退出群聊", color = LemonColors.TextMain) }
+                    if (isOwner) {
+                        TextButton(onClick = {
+                            scope.launch {
+                                Api.groupDissolve(me.id, g.id).onSuccess {
+                                    Toast.makeText(ctx, "群已解散", Toast.LENGTH_SHORT).show()
+                                    selectedGroup = null; load()
+                                }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                            }
+                        }) { Text("解散群聊", color = Color(0xFFD64545)) }
+                    }
+                    TextButton(onClick = { selectedGroup = null }) { Text("取消", color = LemonColors.TextSub) }
+                }
+            }
+        )
+    }
 }
 
 // ══════════════ 群聊窗口 ══════════════
+// ══════════════ 群聊窗口（新版） ══════════════
 @Composable
 fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
-    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.GroupMessage>>(emptyList()) }
-    var input by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
+    var myAvatar by remember { mutableStateOf("") }
+    var showInvite by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var tick by remember { mutableStateOf(0) }
 
-    // 轮询兜底（门铃在线时不轮询）
+    LaunchedEffect(Unit) { myAvatar = Api.AvatarStore.get(me.id) }
     LaunchedEffect(group.id) {
-        while (true) {
-            delay(15000)
-            if (!ChatSocket.online) tick++
-        }
+        while (true) { delay(15000); if (!ChatSocket.online) tick++ }
     }
-    // 实时门铃
     LaunchedEffect(group.id) {
         ChatSocket.start(me.id)
         ChatSocket.events.collect { (_, to) -> if (to == -group.id) tick++ }
     }
     LaunchedEffect(group.id, tick) {
         Api.groupMessages(group.id).onSuccess { msgs ->
-            if (msgs.map { it.id } != messages.map { it.id }) {
-                messages = msgs
-                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
-            }
-        }
+            messages = msgs
+            loaded = true
+            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
+        }.onFailure { loaded = true }
     }
 
     Column(
@@ -1211,6 +1509,9 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
                 Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
                 Text("群号 ${group.id} · ${group.members} 人", fontSize = 11.sp, color = LemonColors.TextSub)
             }
+            IconButton(onClick = { showInvite = true }) {
+                Icon(Icons.Filled.GroupAdd, "邀请成员", tint = LemonColors.Green)
+            }
         }
 
         LazyColumn(
@@ -1218,70 +1519,312 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (!loaded) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LemonColors.Green)
+                    }
+                }
+            } else if (messages.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+                        Text("聊聊群规，打打招呼 🍋", color = LemonColors.TextSub, fontSize = 14.sp)
+                    }
+                }
+            }
             items(messages.size) { i ->
                 val m = messages[i]
                 val mine = m.senderId == me.id
-                Column(
-                    Modifier.fillMaxWidth(),
-                    horizontalAlignment = if (mine) Alignment.End else Alignment.Start
-                ) {
-                    if (!mine) Text(m.nickname, fontSize = 10.sp, color = LemonColors.TextSub, modifier = Modifier.padding(start = 6.dp, bottom = 2.dp))
-                    Box(
-                        Modifier
-                            .widthIn(max = 280.dp)
-                            .clip(LemonShapes.card)
-                            .background(if (mine) LemonColors.Green else Color.White)
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start
                     ) {
-                        Text(m.content, fontSize = 15.sp, color = if (mine) Color.White else LemonColors.TextMain)
+                        if (!mine) {
+                            AvatarImg(m.senderId, m.nickname, m.avatar, 34, m.isOfficial)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+                            if (!mine) Text(m.nickname, fontSize = 10.sp, color = LemonColors.TextSub, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
+                            Box(
+                                Modifier
+                                    .widthIn(max = 250.dp)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 18.dp, topEnd = 18.dp,
+                                            bottomStart = if (mine) 18.dp else 4.dp,
+                                            bottomEnd = if (mine) 4.dp else 18.dp
+                                        )
+                                    )
+                                    .background(if (mine) LemonColors.Green else Color.White)
+                                    .padding(horizontal = 12.dp, vertical = 9.dp)
+                            ) { MsgContent(m.content, mine) }
+                        }
+                        if (mine) {
+                            Spacer(Modifier.width(8.dp))
+                            AvatarImg(me.id, me.nickname, myAvatar, 34, me.isOfficial)
+                        }
                     }
                 }
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = input, onValueChange = { input = it },
-                placeholder = { Text("说点什么…", fontSize = 14.sp, color = LemonColors.TextSub) },
-                modifier = Modifier.weight(1f).height(52.dp),
-                shape = LemonShapes.input,
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LemonColors.Green,
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White
-                )
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    val text = input.trim()
-                    if (text.isEmpty() || sending) return@Button
-                    sending = true
-                    scope.launch {
-                        Api.sendGroup(group.id, me.id, text).onSuccess {
-                            input = ""
-                            Api.groupMessages(group.id).onSuccess { msgs ->
-                                messages = msgs
-                                if (msgs.isNotEmpty()) listState.animateScrollToItem(msgs.size - 1)
-                            }
-                        }.onFailure { e ->
-                            Toast.makeText(ctx, e.message ?: "发送失败", Toast.LENGTH_SHORT).show()
+        ChatInputRow(
+            sending = sending,
+            onSendText = { text ->
+                sending = true
+                scope.launch {
+                    Api.sendGroup(group.id, me.id, text).onSuccess {
+                        Api.groupMessages(group.id).onSuccess { msgs ->
+                            messages = msgs
+                            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
                         }
-                        sending = false
-                    }
-                },
-                shape = LemonShapes.pill,
-                colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
-                modifier = Modifier.size(48.dp),
-                contentPadding = PaddingValues(0.dp)
-            ) {
-                Icon(Icons.Filled.Send, "发送", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }.onFailure { e -> }
+                    sending = false
+                }
+            },
+            onSendImage = { data ->
+                sending = true
+                scope.launch {
+                    Api.sendGroup(group.id, me.id, data).onSuccess {
+                        Api.groupMessages(group.id).onSuccess { msgs ->
+                            messages = msgs
+                            if (msgs.isNotEmpty()) listState.scrollToItem(msgs.size - 1)
+                        }
+                    }.onFailure { e -> }
+                    sending = false
+                }
             }
+        )
+    }
+
+    if (showInvite) {
+        val ctx = LocalContext.current
+        var uname by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showInvite = false },
+            title = { Text("邀请成员", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = uname, onValueChange = { uname = it },
+                    label = { Text("对方用户名") },
+                    shape = LemonShapes.input, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val u = uname.trim()
+                    if (u.isNotEmpty()) {
+                        scope.launch {
+                            Api.groupInvite(me.id, group.id, u).onSuccess {
+                                Toast.makeText(ctx, "已邀请 $u", Toast.LENGTH_SHORT).show()
+                                showInvite = false
+                            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "邀请失败", Toast.LENGTH_LONG).show() }
+                        }
+                    }
+                }) { Text("邀请", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showInvite = false }) { Text("取消", color = LemonColors.TextSub) } }
+        )
+    }
+}
+// ══════════════ 共享组件 ══════════════
+
+// 头像：有图显示图，没图显示首字圆块
+@Composable
+fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official: Boolean = false) {
+    val bmp = remember(avatar) {
+        if (avatar.startsWith("data:image/")) {
+            runCatching {
+                val bytes = android.util.Base64.decode(avatar.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }.getOrNull()
+        } else null
+    }
+    Box(
+        Modifier.size(size.dp).clip(CircleShape).background(LemonColors.GreenLight),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bmp != null) {
+            Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Text(fallback.take(1), fontSize = (size * 0.42f).sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
+        }
+        if (official) OfficialBadge((size * 0.42f).toInt())
+    }
+}
+
+// 消息内容：文本 或 base64 图片
+@Composable
+fun MsgContent(content: String, mine: Boolean) {
+    if (content.startsWith("data:image/")) {
+        val bmp = remember(content) {
+            runCatching {
+                val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }.getOrNull()
+        }
+        if (bmp != null) {
+            val ratio = bmp.height.toFloat() / bmp.width.coerceAtLeast(1)
+            Image(bmp, null, Modifier.widthIn(max = 200.dp).heightIn(max = 260.dp).fillMaxWidth(), contentScale = ContentScale.FillWidth)
+        } else Text("[图片]", color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
+    } else {
+        Text(content, color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
+    }
+}
+
+// 图片压缩 → base64 dataURL（最长边 1024，质量 70）
+fun compressImage(ctx: android.content.Context, uri: Uri): String? {
+    return runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1024) sample *= 2
+        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        val bmp = ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+            ?: return null
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, out)
+        "data:image/jpeg;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+    }.getOrNull()
+}
+
+// 聊天输入栏（文本 + 加号图片面板）
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, sending: Boolean) {
+    val ctx = LocalContext.current
+    var input by remember { mutableStateOf("") }
+    var showPanel by remember { mutableStateOf(false) }
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    val albumLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { u ->
+        val data = compressImage(ctx, u)
+        if (data != null) onSendImage(data)
+        else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
+    } }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { ok ->
+        if (ok) cameraUri?.let { u ->
+            val data = compressImage(ctx, u)
+            if (data != null) onSendImage(data)
+            else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { showPanel = !showPanel }) {
+            Icon(Icons.Filled.AddCircle, "更多", tint = LemonColors.Green, modifier = Modifier.size(28.dp))
+        }
+        OutlinedTextField(
+            value = input, onValueChange = { input = it },
+            placeholder = { Text("说点什么…", fontSize = 14.sp, color = LemonColors.TextSub) },
+            modifier = Modifier.weight(1f),
+            shape = LemonShapes.pill,
+            maxLines = 4,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LemonColors.Green,
+                unfocusedBorderColor = Color(0xFFDDE5E0),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White
+            )
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = { val t = input.trim(); if (t.isNotEmpty() && !sending) { onSendText(t); input = "" } },
+            shape = LemonShapes.pill,
+            colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
+            modifier = Modifier.size(48.dp),
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            if (sending) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            else Icon(Icons.Filled.Send, "发送", tint = Color.White, modifier = Modifier.size(20.dp))
+        }
+    }
+
+    if (showPanel) {
+        ModalBottomSheet(onDismissRequest = { showPanel = false }) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                            .clickable {
+                                val file = java.io.File(ctx.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                                val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
+                                cameraUri = uri
+                                showPanel = false
+                                cameraLauncher.launch(uri)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Filled.PhotoCamera, null, tint = LemonColors.Green, modifier = Modifier.size(26.dp)) }
+                    Text("相机", fontSize = 12.sp, color = LemonColors.TextSub)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                            .clickable {
+                                showPanel = false
+                                albumLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
+                                    androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Filled.PhotoLibrary, null, tint = LemonColors.Green, modifier = Modifier.size(26.dp)) }
+                    Text("相册", fontSize = 12.sp, color = LemonColors.TextSub)
+                }
+            }
+            Spacer(Modifier.height(30.dp))
         }
     }
 }
+
+// 好友申请对话框（微信式带申请信息）
+@Composable
+fun FriendRequestDialog(me: Api.User, targetUsername: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var msg by remember { mutableStateOf("我是 ${me.nickname}") }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("好友申请", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("对方用户名：$targetUsername", fontSize = 13.sp, color = LemonColors.TextSub)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = msg, onValueChange = { msg = it },
+                    label = { Text("申请信息") },
+                    shape = LemonShapes.input, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                busy = true
+                scope.launch {
+                    Api.sendFriendRequest(me.id, targetUsername, msg.trim()).onSuccess {
+                        Toast.makeText(ctx, "申请已发送", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }.onFailure { e ->
+                        Toast.makeText(ctx, e.message ?: "发送失败", Toast.LENGTH_LONG).show()
+                    }
+                    busy = false
+                }
+            }) { Text("发送申请", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = LemonColors.TextSub) } }
+    )
+}
+
