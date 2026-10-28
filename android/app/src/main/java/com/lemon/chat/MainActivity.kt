@@ -1378,12 +1378,21 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(46.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                            Modifier.size(46.dp).clip(LemonShapes.pill).background(
+                                if (g.gtype == "team") Color(0xFF34A853) else LemonColors.GreenLight
+                            ),
                             contentAlignment = Alignment.Center
-                        ) { Text(g.name.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
+                        ) { Text(g.name.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (g.gtype == "team") Color.White else LemonColors.Green) }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(g.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(g.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                                if (g.gtype == "team") {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("团队", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clip(LemonShapes.pill).background(Color(0xFF34A853)).padding(horizontal = 5.dp, vertical = 1.dp))
+                                }
+                            }
                             Text("群号 ${g.id} · ${g.members} 人", fontSize = 12.sp, color = LemonColors.TextSub)
                         }
                         Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
@@ -1396,6 +1405,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
 
     if (showCreate) {
         var groupName by remember { mutableStateOf("") }
+        var newGtype by remember { mutableStateOf("normal") }
         AlertDialog(
             onDismissRequest = { showCreate = false },
             confirmButton = {
@@ -1403,7 +1413,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                     val n = groupName.trim()
                     if (n.isNotEmpty()) {
                         scope.launch {
-                            Api.createGroup(me.id, n).onSuccess { g ->
+                            Api.createGroup(me.id, n, newGtype).onSuccess { g ->
                                 showCreate = false; onOpenGroup(g)
                             }.onFailure { e -> Toast.makeText(ctx, e.message ?: "建群失败", Toast.LENGTH_SHORT).show() }
                         }
@@ -1413,11 +1423,28 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
             dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消", color = LemonColors.TextSub) } },
             title = { Text("建个新群", fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
-                    value = groupName, onValueChange = { groupName = it },
-                    label = { Text("群名称") }, singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
-                )
+                Column {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("normal" to "普通群聊", "team" to "团队群聊").forEach { (t, label) ->
+                            Box(
+                                Modifier.clip(LemonShapes.pill)
+                                    .background(if (newGtype == t) LemonColors.Green else Color(0xFFEDF3EF))
+                                    .clickable { newGtype = t }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) { Text(label, fontSize = 12.sp, color = if (newGtype == t) Color.White else LemonColors.TextMain, fontWeight = FontWeight.SemiBold) }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = groupName, onValueChange = { groupName = it },
+                        label = { Text(if (newGtype == "team") "团队名称" else "群名称") }, singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                    )
+                    if (newGtype == "team") {
+                        Spacer(Modifier.height(6.dp))
+                        Text("团队群：进去后可建部门群/小组群/临时群", fontSize = 11.sp, color = LemonColors.TextSub)
+                    }
+                }
             }
         )
     }
@@ -1489,13 +1516,15 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
 // ══════════════ 群聊窗口 ══════════════
 // ══════════════ 群聊窗口（新版） ══════════════
 @Composable
-fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
+fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGroup: (Api.Group) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.GroupMessage>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var myAvatar by remember { mutableStateOf("") }
     var showInvite by remember { mutableStateOf(false) }
+    var showChildren by remember { mutableStateOf(false) }
+    var showCreateChild by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var tick by remember { mutableStateOf(0) }
 
@@ -1529,11 +1558,27 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
                 Icon(Icons.Filled.ArrowBackIosNew, "返回", tint = LemonColors.TextMain, modifier = Modifier.size(20.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+                    if (group.gtype != "normal") {
+                        Spacer(Modifier.width(6.dp))
+                        Box(Modifier.clip(LemonShapes.pill).background(LemonColors.GreenLight).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                            Text(gtypeLabel(group.gtype), fontSize = 10.sp, color = LemonColors.Green, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
                 Text("群号 ${group.id} · ${group.members} 人", fontSize = 11.sp, color = LemonColors.TextSub)
             }
             IconButton(onClick = { showInvite = true }) {
                 Icon(Icons.Filled.GroupAdd, "邀请成员", tint = LemonColors.Green)
+            }
+            if (group.gtype != "normal") {
+                IconButton(onClick = { showChildren = true }) {
+                    Icon(Icons.Filled.FormatListBulleted, "子群列表", tint = LemonColors.Green)
+                }
+                IconButton(onClick = { showCreateChild = true }) {
+                    Icon(Icons.Filled.AddCircle, "新建子群", tint = LemonColors.Green)
+                }
             }
         }
 
@@ -1622,6 +1667,15 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit) {
         )
     }
 
+    if (showChildren) {
+        ChildrenDialog(me, group.id, onDismiss = { showChildren = false }, onOpenGroup = {
+            showChildren = false
+            onOpenGroup(it)
+        })
+    }
+    if (showCreateChild) {
+        CreateChildDialog(me, group, onDismiss = { showCreateChild = false })
+    }
     if (showInvite) {
         val ctx = LocalContext.current
         var uname by remember { mutableStateOf("") }
@@ -1851,3 +1905,152 @@ fun FriendRequestDialog(me: Api.User, targetUsername: String, onDismiss: () -> U
     )
 }
 
+
+// ══════════════ 团队套娃组件 ══════════════
+
+fun gtypeLabel(g: String) = when (g) {
+    "team" -> "团队"
+    "dept" -> "部门群"
+    "sub" -> "小组群"
+    "temp" -> "临时群"
+    else -> ""
+}
+
+@Composable
+fun ChildrenDialog(me: Api.User, rootId: Int, onDismiss: () -> Unit, onOpenGroup: (Api.Group) -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var tree by remember { mutableStateOf<Pair<Int, List<Api.Group>>?>(null) }
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(tick) {
+        Api.groupTree(rootId, me.id).onSuccess { tree = it }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("团队结构", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                if (tree == null) {
+                    CircularProgressIndicator(color = LemonColors.Green, modifier = Modifier.size(28.dp))
+                } else {
+                    val (rootOwner, all) = tree!!
+                    val byParent = all.groupBy { it.parentId }
+                    val amTeamOwner = rootOwner == me.id
+                    // 递归渲染
+                    @Composable fun renderRows(parentId: Int?, depth: Int) {
+                        val kids = byParent[parentId] ?: return
+                        kids.forEach { g ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(start = (depth * 14).dp, top = 5.dp, bottom = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    gtypeLabel(g.gtype), fontSize = 9.sp,
+                                    color = Color.White, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clip(LemonShapes.pill)
+                                        .background(if (g.gtype == "temp") Color(0xFFFF9800) else LemonColors.Green)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(g.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                                    val exp = g.expiresAt?.let { " · 剩 ${((it - System.currentTimeMillis()).coerceAtLeast(0) / 86400000) + 1} 天" } ?: ""
+                                    Text("${g.members} 人$exp" + if (g.openJoin) " · 可自由加入" else "", fontSize = 10.sp, color = LemonColors.TextSub)
+                                }
+                                if (g.isMember) {
+                                    TextButton(onClick = { onOpenGroup(g) }, contentPadding = PaddingValues(0.dp)) {
+                                        Text("进入", color = LemonColors.Green, fontSize = 12.sp)
+                                    }
+                                } else {
+                                    val canJoin = g.openJoin || amTeamOwner
+                                    TextButton(
+                                        enabled = canJoin,
+                                        onClick = {
+                                            scope.launch {
+                                                val r = if (amTeamOwner) Api.ownerJoin(me.id, g.id) else Api.joinDirect(me.id, g.id)
+                                                r.onSuccess { tick++ }
+                                                    .onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) { Text(if (canJoin) "加入" else "需邀请", color = if (canJoin) LemonColors.Green else LemonColors.TextSub, fontSize = 12.sp) }
+                                }
+                            }
+                            renderRows(g.id, depth + 1)
+                        }
+                    }
+                    renderRows(rootId, 0)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭", color = LemonColors.TextSub) } }
+    )
+}
+
+// 简易全局 scope/context 供对话框内联使用
+lateinit var noContext: android.content.Context
+fun scopelessLaunch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
+
+@Composable
+fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf("") }
+    var gtype by remember { mutableStateOf("dept") }
+    var ttl by remember { mutableStateOf(30) }
+    var busy by remember { mutableStateOf(false) }
+    val ttlOptions = listOf(0 to "永久", 1 to "1天", 7 to "7天", 30 to "30天", 90 to "90天", 180 to "180天")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("在「${parent.name}」下建群", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("dept" to "部门群", "sub" to "小组群", "temp" to "临时群").forEach { (t, label) ->
+                        Box(
+                            Modifier.clip(LemonShapes.pill)
+                                .background(if (gtype == t) LemonColors.Green else Color(0xFFEDF3EF))
+                                .clickable { gtype = t }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) { Text(label, fontSize = 12.sp, color = if (gtype == t) Color.White else LemonColors.TextMain, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("群名称") },
+                    shape = LemonShapes.input, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                )
+                if (gtype == "temp") {
+                    Spacer(Modifier.height(10.dp))
+                    Text("保留时长", fontSize = 12.sp, color = LemonColors.TextSub)
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        ttlOptions.forEach { (d, label) ->
+                            Box(
+                                Modifier.clip(LemonShapes.pill)
+                                    .background(if (ttl == d) LemonColors.Green else Color(0xFFEDF3EF))
+                                    .clickable { ttl = d }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) { Text(label, fontSize = 11.sp, color = if (ttl == d) Color.White else LemonColors.TextMain) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && name.trim().isNotEmpty(), onClick = {
+                busy = true
+                scope.launch {
+                    Api.createChildGroup(me.id, parent.id, name.trim(), gtype, ttl).onSuccess {
+                        Toast.makeText(ctx, "创建成功", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }.onFailure { e -> Toast.makeText(ctx, e.message ?: "创建失败", Toast.LENGTH_LONG).show() }
+                    busy = false
+                }
+            }) { Text("创建", color = LemonColors.Green, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = LemonColors.TextSub) } }
+    )
+}
