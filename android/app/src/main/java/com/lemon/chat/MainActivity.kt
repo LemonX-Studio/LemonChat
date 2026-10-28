@@ -297,6 +297,10 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var lastGroup by remember { mutableStateOf<Api.Group?>(null) }
     var inAdmin by remember { mutableStateOf(false) }
     val ctxForKick = LocalContext.current
+    // 系统返回键：在聊天/群聊/管理页时先退回主界面，而不是退出 App
+    androidx.activity.compose.BackHandler(enabled = chattingWith != null || inGroupChat != null || inAdmin) {
+        chattingWith = null; inGroupChat = null; inAdmin = false
+    }
     LaunchedEffect(Unit) {
         ChatSocket.forceLogout.collect {
             Toast.makeText(ctxForKick, "您的账号已被管理员强制下线", Toast.LENGTH_LONG).show()
@@ -1729,7 +1733,6 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
         } else {
             Text(fallback.take(1), fontSize = (size * 0.42f).sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
         }
-        if (official) OfficialBadge((size * 0.42f).toInt())
     }
 }
 
