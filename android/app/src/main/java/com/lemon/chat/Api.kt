@@ -21,10 +21,43 @@ object Api {
         .let { "wss://$it" }
 
     val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)   // 连接失败自动换路线（含 IPv4/IPv6 回退）
         .build()
     private val json = "application/json; charset=utf-8".toMediaType()
+
+    // 网络抖动防护：失败自动重试（共 3 次尝试，间隔递增）
+    // 只重试"网络层失败"（IOException），业务错误（密码错等）不重试
+    private fun <T> withRetry(attempts: Int = 3, block: () -> T): T {
+        var lastErr: Exception? = null
+        repeat(attempts) { i ->
+            try {
+                return block()
+            } catch (e: java.io.IOException) {
+                lastErr = e
+                if (i < attempts - 1) Thread.sleep(500L * (i + 1)) // 0.5s, 1s
+            }
+        }
+        throw lastErr ?: java.io.IOException("网络连接失败")
+    }
+
+    private fun get(path: String): JSONObject = withRetry {
+        val req = Request.Builder().url("$BASE_URL/$path").get().build()
+        client.newCall(req).execute().use { resp ->
+            val body = resp.body?.string() ?: "{}"
+            JSONObject(body)
+        }
+    }
+
+    private fun post(path: String, obj: JSONObject): JSONObject = withRetry {
+        val body = obj.toString().toRequestBody(json)
+        val req = Request.Builder().url("$BASE_URL/$path").post(body).build()
+        client.newCall(req).execute().use { resp ->
+            val b = resp.body?.string() ?: "{}"
+            JSONObject(b)
+        }
+    }
 
     data class User(val id: Int, val username: String, val nickname: String, val bio: String = "", val isOfficial: Boolean = false, val avatar: String = "")
     data class Conversation(val peerId: Int, val nickname: String, val lastMsg: String, val lastFromMe: Boolean, val isOfficial: Boolean = false)

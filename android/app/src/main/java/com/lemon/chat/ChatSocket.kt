@@ -23,13 +23,17 @@ object ChatSocket {
 
     private var ws: WebSocket? = null
     private var connectedUserId = 0
+    private var loopJob: kotlinx.coroutines.Job? = null   // 重连循环任务，换号时先取消旧的
     @Volatile var online = false   // 门铃是否在线（在线时界面可以不轮询）
 
     @Synchronized
     fun start(userId: Int) {
         if (connectedUserId == userId && ws != null) return
+        loopJob?.cancel()   // 修复：换号/重启时必须停掉旧的重连循环，否则旧身份会永远在后台重连
+        ws = null
+        online = false
         connectedUserId = userId
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        loopJob = CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             while (true) {
                 try {
                     val req = Request.Builder().url("${Api.WS_BASE}/ws?userId=$userId").build()
