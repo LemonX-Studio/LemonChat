@@ -92,23 +92,6 @@ object Api {
         fun put(userId: Int, avatar: String) { cache[userId] = avatar }
     }
 
-    private fun get(path: String): JSONObject {
-        val req = Request.Builder().url("$BASE_URL/$path").get().build()
-        client.newCall(req).execute().use { resp ->
-            val body = resp.body?.string() ?: "{}"
-            return JSONObject(body)
-        }
-    }
-
-    private fun post(path: String, obj: JSONObject): JSONObject {
-        val body = obj.toString().toRequestBody(json)
-        val req = Request.Builder().url("$BASE_URL/$path").post(body).build()
-        client.newCall(req).execute().use { resp ->
-            val b = resp.body?.string() ?: "{}"
-            return JSONObject(b)
-        }
-    }
-
     suspend fun register(username: String, password: String, nickname: String, secQ: String, secA: String): Result<User> =
         withContext(Dispatchers.IO) {
             runCatching {
