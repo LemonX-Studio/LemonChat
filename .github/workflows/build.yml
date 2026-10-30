@@ -31,5 +31,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LemonChat-v0.2.8
+          name: LemonChat-v0.2.9
           path: android/app/build/outputs/apk/release/app-release.apk
