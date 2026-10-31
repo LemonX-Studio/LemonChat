@@ -1465,7 +1465,8 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                 TextButton(enabled = fg != null, onClick = {
                     if (fg != null) {
                         scope.launch {
-                            Api.joinDirect(me.id, fg.id).onSuccess {
+                            Api.joinDirect(me.id, fg.id).onSuccess { msg ->
+                                Toast.makeText(ctx, msg ?: "已加入", Toast.LENGTH_SHORT).show()
                                 showJoin = false; load()
                             }.onFailure { e -> Toast.makeText(ctx, e.message ?: "加群失败", Toast.LENGTH_SHORT).show() }
                         }
@@ -1505,7 +1506,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                             val label = if (fg.code.isNotEmpty()) "${fg.name}-${fg.code}" else fg.name
                             Text(label, fontSize = 12.sp, color = LemonColors.TextSub)
                             if (!fg.openJoin && fg.gtype != "normal")
-                                Text("⚠️ 该群需邀请才能加入", fontSize = 11.sp, color = Color(0xFFB3541E))
+                                Text("需群主同意后加入", fontSize = 11.sp, color = Color(0xFFB3541E))
                         }
                     }
                 }
@@ -1560,6 +1561,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
     var sending by remember { mutableStateOf(false) }
     var myAvatar by remember { mutableStateOf("") }
     var showInvite by remember { mutableStateOf(false) }
+    var showRequests by remember { mutableStateOf(false) }
     var showChildren by remember { mutableStateOf(false) }
     var showCreateChild by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -1608,6 +1610,11 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
             }
             IconButton(onClick = { showInvite = true }) {
                 Icon(Icons.Filled.GroupAdd, "邀请成员", tint = LemonColors.Green)
+            }
+            if (group.ownerId == me.id) {
+                IconButton(onClick = { showRequests = true }) {
+                    Icon(Icons.Filled.HowToReg, "群申请管理", tint = LemonColors.Green)
+                }
             }
             if (group.gtype != "normal") {
                 IconButton(onClick = { showChildren = true }) {
@@ -1713,6 +1720,9 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
     if (showCreateChild) {
         CreateChildDialog(me, group, onDismiss = { showCreateChild = false })
     }
+    if (showRequests) {
+        GroupRequestsDialog(me, group, onDismiss = { showRequests = false })
+    }
     if (showInvite) {
         val ctx = LocalContext.current
         var uname by remember { mutableStateOf("") }
@@ -1732,8 +1742,8 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                     val u = uname.trim()
                     if (u.isNotEmpty()) {
                         scope.launch {
-                            Api.groupInvite(me.id, group.id, u).onSuccess {
-                                Toast.makeText(ctx, "已邀请 $u", Toast.LENGTH_SHORT).show()
+                            Api.groupInvite(me.id, group.id, u).onSuccess { msg ->
+                                Toast.makeText(ctx, msg ?: "已邀请 $u", Toast.LENGTH_SHORT).show()
                                 showInvite = false
                             }.onFailure { e -> Toast.makeText(ctx, e.message ?: "邀请失败", Toast.LENGTH_LONG).show() }
                         }
@@ -1743,6 +1753,105 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
             dismissButton = { TextButton(onClick = { showInvite = false }) { Text("取消", color = LemonColors.TextSub) } }
         )
     }
+}
+
+// ══════════════ 群申请管理（群主） ══════════════
+
+@Composable
+fun GroupRequestsDialog(me: Api.User, group: Api.Group, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    var reqs by remember { mutableStateOf<List<Api.GroupReq>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun load() {
+        scope.launch {
+            Api.groupRequests(me.id, group.id).onSuccess { (o, list) ->
+                open = o; reqs = list; loaded = true
+            }.onFailure { e ->
+                Toast.makeText(ctx, e.message ?: "拉取失败", Toast.LENGTH_SHORT).show(); loaded = true
+            }
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("群申请 · ${group.name}", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("进群需申请", fontSize = 14.sp, color = LemonColors.TextMain)
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = !open,
+                        onCheckedChange = { need ->
+                            if (!busy) {
+                                busy = true
+                                scope.launch {
+                                    Api.setOpenJoin(me.id, group.id, !need).onSuccess {
+                                        open = !need
+                                        Toast.makeText(ctx, if (need) "已开启：进群需申请" else "已关闭：可直接加入", Toast.LENGTH_SHORT).show()
+                                    }.onFailure { e -> Toast.makeText(ctx, e.message ?: "设置失败", Toast.LENGTH_SHORT).show() }
+                                    busy = false
+                                }
+                            }
+                        },
+                        enabled = !busy
+                    )
+                }
+                Text("开关关掉后，别人搜群号就能直接进", fontSize = 11.sp, color = LemonColors.TextSub)
+                Spacer(Modifier.height(10.dp))
+                if (!loaded) {
+                    Text("加载中…", fontSize = 13.sp, color = LemonColors.TextSub)
+                } else if (reqs.isEmpty()) {
+                    Text("暂时没有待处理的申请", fontSize = 13.sp, color = LemonColors.TextSub)
+                } else {
+                    Column {
+                        reqs.forEach { q ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        if (q.inviter.isNotEmpty()) "${q.inviter} 邀请 ${q.applicant}" else q.applicant,
+                                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain
+                                    )
+                                    Text(
+                                        if (q.inviter.isNotEmpty()) "成员邀请 · @${q.appUsername}" else "主动申请 · @${q.appUsername}",
+                                        fontSize = 11.sp, color = LemonColors.TextSub
+                                    )
+                                }
+                                TextButton(enabled = !busy, onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        Api.handleRequest(me.id, q.id, true).onSuccess {
+                                            Toast.makeText(ctx, "已通过", Toast.LENGTH_SHORT).show(); load()
+                                        }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                        busy = false
+                                    }
+                                }, contentPadding = PaddingValues(0.dp)) { Text("通过", color = LemonColors.Green, fontSize = 12.sp) }
+                                TextButton(enabled = !busy, onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        Api.handleRequest(me.id, q.id, false).onSuccess {
+                                            Toast.makeText(ctx, "已拒绝", Toast.LENGTH_SHORT).show(); load()
+                                        }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                        busy = false
+                                    }
+                                }, contentPadding = PaddingValues(0.dp)) { Text("拒绝", color = LemonColors.TextSub, fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭", color = LemonColors.TextSub) } }
+    )
 }
 // ══════════════ 共享组件 ══════════════
 
@@ -1998,18 +2107,19 @@ fun ChildrenDialog(me: Api.User, rootId: Int, onDismiss: () -> Unit, onOpenGroup
                                         Text("进入", color = LemonColors.Green, fontSize = 12.sp)
                                     }
                                 } else {
-                                    val canJoin = g.openJoin || amTeamOwner
+                                    val canJoin = true
                                     TextButton(
-                                        enabled = canJoin,
                                         onClick = {
                                             scope.launch {
-                                                val r = if (amTeamOwner) Api.ownerJoin(me.id, g.id) else Api.joinDirect(me.id, g.id)
-                                                r.onSuccess { tick++ }
-                                                    .onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
+                                                val r = if (amTeamOwner) Api.ownerJoin(me.id, g.id).map { null } else Api.joinDirect(me.id, g.id)
+                                                r.onSuccess { msg ->
+                                                    Toast.makeText(ctx, msg ?: "已加入", Toast.LENGTH_SHORT).show()
+                                                    tick++
+                                                }.onFailure { e -> Toast.makeText(ctx, e.message ?: "失败", Toast.LENGTH_SHORT).show() }
                                             }
                                         },
                                         contentPadding = PaddingValues(0.dp)
-                                    ) { Text(if (canJoin) "加入" else "需邀请", color = if (canJoin) LemonColors.Green else LemonColors.TextSub, fontSize = 12.sp) }
+                                    ) { Text(if (g.openJoin || amTeamOwner) "加入" else "申请", color = if (g.openJoin || amTeamOwner) LemonColors.Green else LemonColors.TextSub, fontSize = 12.sp) }
                                 }
                             }
                             renderRows(g.id, depth + 1)

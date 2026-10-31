@@ -310,11 +310,39 @@ object Api {
             }
         }
 
-    suspend fun joinDirect(userId: Int, groupId: Int): Result<Unit> =
+    // 加群：null=直接进了；非null=等待群主通过的提示语
+    suspend fun joinDirect(userId: Int, groupId: Int): Result<String?> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "joinDirect").put("userId", userId).put("groupId", groupId))
                 if (!r.optBoolean("ok")) error(r.optString("error", "加入失败"))
+                if (r.optBoolean("pending")) r.optString("msg", "已发送申请，等群主通过") else null
+            }
+        }
+
+    data class GroupReq(val id: Int, val applicant: String, val appUsername: String, val inviter: String)
+
+    // 群申请列表：Pair(是否自由加入, 待处理列表)
+    suspend fun groupRequests(userId: Int, groupId: Int): Result<Pair<Boolean, List<GroupReq>>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("groups", JSONObject().put("action", "requests").put("userId", userId).put("groupId", groupId))
+                if (!r.optBoolean("ok")) error(r.optString("error", "拉申请失败"))
+                val arr: JSONArray = r.getJSONArray("requests")
+                val list = List(arr.length()) { i ->
+                    val o = arr.getJSONObject(i)
+                    GroupReq(o.getInt("id"), o.optString("applicant"), o.optString("app_username"), o.optString("inviter"))
+                }
+                Pair(r.optBoolean("open"), list)
+            }
+        }
+
+    suspend fun handleRequest(userId: Int, requestId: Int, approve: Boolean): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = post("groups", JSONObject().put("action", if (approve) "approve" else "reject")
+                    .put("userId", userId).put("requestId", requestId))
+                if (!r.optBoolean("ok")) error(r.optString("error", "处理失败"))
             }
         }
 
@@ -453,12 +481,14 @@ object Api {
             }
         }
 
-    suspend fun groupInvite(userId: Int, groupId: Int, username: String): Result<Unit> =
+    // 邀请：null=直接进群了；非null=等群主通过的提示语
+    suspend fun groupInvite(userId: Int, groupId: Int, username: String): Result<String?> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "invite")
                     .put("userId", userId).put("groupId", groupId).put("username", username))
                 if (!r.optBoolean("ok")) error(r.optString("error", "邀请失败"))
+                if (r.optBoolean("pending")) r.optString("msg", "已提交，等群主通过") else null
             }
         }
 
