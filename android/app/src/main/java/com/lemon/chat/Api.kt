@@ -68,7 +68,7 @@ object Api {
     data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
     data class Group(val id: Int, val name: String, val owner: String, val ownerId: Int, val members: Int,
         val gtype: String = "normal", val parentId: Int? = null, val expiresAt: Long? = null,
-        val openJoin: Boolean = false, val isMember: Boolean = false)
+        val openJoin: Boolean = false, val isMember: Boolean = false, val code: String = "")
     data class GroupMessage(val id: Int, val senderId: Int, val content: String, val nickname: String, val time: Long,
         val avatar: String = "", val isOfficial: Boolean = false)
 
@@ -256,7 +256,7 @@ object Api {
         o.getInt("id"), o.getString("name"), o.optString("owner"), o.getInt("owner_id"), o.optInt("members", 1),
         o.optString("gtype", "normal"), if (o.has("parent_id") && !o.isNull("parent_id")) o.optInt("parent_id") else null,
         if (o.has("expires_at") && !o.isNull("expires_at")) o.optLong("expires_at") else null,
-        o.optBoolean("open_join"), o.optBoolean("isMember", true)
+        o.optBoolean("open_join"), o.optBoolean("isMember", true), o.optString("code", "")
     )
 
     suspend fun groups(userId: Int): Result<List<Group>> =
@@ -297,7 +297,8 @@ object Api {
                     .put("gtype", gtype).put("ttlDays", ttlDays))
                 if (!r.optBoolean("ok")) error(r.optString("error", "创建失败"))
                 val g = r.getJSONObject("group")
-                Group(g.getInt("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype))
+                Group(g.getInt("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype),
+                    code = g.optString("code", ""))
             }
         }
 
@@ -317,20 +318,28 @@ object Api {
             }
         }
 
+    // 搜群：小群编号（1-t1）或纯群号（5）
+    suspend fun searchGroup(q: String): Result<Pair<Group, Group>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = get("groups/search?q=" + java.net.URLEncoder.encode(q.trim(), "UTF-8"))
+                if (!r.optBoolean("ok")) error(r.optString("error", "没找到这个群"))
+                val root = r.getJSONObject("root")
+                val g = r.getJSONObject("group")
+                Pair(
+                    Group(root.getInt("id"), root.getString("name"), "", 0, 0),
+                    Group(g.getInt("id"), g.getString("name"), "", 0, g.optInt("members", 1),
+                        g.optString("gtype", "normal"), openJoin = g.optBoolean("open_join"), code = g.optString("code", ""))
+                )
+            }
+        }
+
     suspend fun setOpenJoin(userId: Int, groupId: Int, open: Boolean): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "setOpen")
                     .put("userId", userId).put("groupId", groupId).put("open", open))
                 if (!r.optBoolean("ok")) error(r.optString("error", "设置失败"))
-            }
-        }
-
-    suspend fun joinGroup(userId: Int, groupId: Int): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val r = post("groups/join", JSONObject().put("userId", userId).put("groupId", groupId))
-                if (!r.optBoolean("ok")) error(r.optString("error", "加群失败"))
             }
         }
 

@@ -1454,14 +1454,18 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
     }
     if (showJoin) {
         var joinId by remember { mutableStateOf("") }
+        var foundRoot by remember { mutableStateOf<Api.Group?>(null) }
+        var foundGroup by remember { mutableStateOf<Api.Group?>(null) }
+        var searchErr by remember { mutableStateOf("") }
+        fun resetFound() { foundRoot = null; foundGroup = null; searchErr = "" }
         AlertDialog(
             onDismissRequest = { showJoin = false },
             confirmButton = {
-                TextButton(onClick = {
-                    val id = joinId.trim().toIntOrNull()
-                    if (id != null) {
+                val fg = foundGroup
+                TextButton(enabled = fg != null, onClick = {
+                    if (fg != null) {
                         scope.launch {
-                            Api.joinGroup(me.id, id).onSuccess {
+                            Api.joinDirect(me.id, fg.id).onSuccess {
                                 showJoin = false; load()
                             }.onFailure { e -> Toast.makeText(ctx, e.message ?: "加群失败", Toast.LENGTH_SHORT).show() }
                         }
@@ -1469,13 +1473,42 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                 }) { Text("加入", color = LemonColors.Green) }
             },
             dismissButton = { TextButton(onClick = { showJoin = false }) { Text("取消", color = LemonColors.TextSub) } },
-            title = { Text("输入群号加群", fontWeight = FontWeight.Bold) },
+            title = { Text("搜索群号加群", fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
-                    value = joinId, onValueChange = { joinId = it },
-                    label = { Text("群号（纯数字）") }, singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
-                )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = joinId, onValueChange = { joinId = it; resetFound() },
+                            label = { Text("群号 或 小群编号") }, singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = {
+                            val q = joinId.trim()
+                            if (q.isNotEmpty()) {
+                                scope.launch {
+                                    Api.searchGroup(q).onSuccess { (root, g) ->
+                                        foundRoot = root; foundGroup = g; searchErr = ""
+                                    }.onFailure { e -> resetFound(); searchErr = e.message ?: "没找到这个群" }
+                                }
+                            }
+                        }) { Text("搜索", color = LemonColors.Green, fontWeight = FontWeight.SemiBold) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val fr = foundRoot; val fg = foundGroup
+                    when {
+                        searchErr.isNotEmpty() -> Text(searchErr, fontSize = 13.sp, color = Color(0xFFB3541E))
+                        fg != null && fr != null -> Column {
+                            Text(fr.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
+                            Text("团队群号 ${fr.id}", fontSize = 11.sp, color = LemonColors.TextSub)
+                            val label = if (fg.code.isNotEmpty()) "${fg.name}-${fg.code}" else fg.name
+                            Text(label, fontSize = 12.sp, color = LemonColors.TextSub)
+                            if (!fg.openJoin && fg.gtype != "normal")
+                                Text("⚠️ 该群需邀请才能加入", fontSize = 11.sp, color = Color(0xFFB3541E))
+                        }
+                    }
+                }
             }
         )
     }
@@ -1956,7 +1989,7 @@ fun ChildrenDialog(me: Api.User, rootId: Int, onDismiss: () -> Unit, onOpenGroup
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(g.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
+                                    Text(g.name + if (g.code.isNotEmpty()) "  ·  ${g.code}" else "", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LemonColors.TextMain)
                                     val exp = g.expiresAt?.let { " · 剩 ${((it - System.currentTimeMillis()).coerceAtLeast(0) / 86400000) + 1} 天" } ?: ""
                                     Text("${g.members} 人$exp" + if (g.openJoin) " · 可自由加入" else "", fontSize = 10.sp, color = LemonColors.TextSub)
                                 }
