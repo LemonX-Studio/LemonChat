@@ -1615,7 +1615,10 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                         }
                     }
                 }
-                Text("群号 ${group.id} · ${group.members} 人", fontSize = 11.sp, color = LemonColors.TextSub)
+                Text(
+                    "群号 ${if (group.code.isNotEmpty()) group.code else group.id.toString()} · ${group.members} 人",
+                    fontSize = 11.sp, color = LemonColors.TextSub
+                )
             }
             IconButton(onClick = { showInvite = true }) {
                 Icon(Icons.Filled.GroupAdd, "邀请成员", tint = LemonColors.Green)
