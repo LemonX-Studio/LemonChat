@@ -291,15 +291,19 @@ fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChang
 fun MainScreen(me: Api.User, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
-    var inGroupChat by remember { mutableStateOf<Api.Group?>(null) }
+    // 群聊导航栈：进小群=压栈，返回=弹回上一个群（小群→上群→团队页）
+    var groupStack by remember { mutableStateOf<List<Api.Group>>(emptyList()) }
     // 退出动画期间状态已清空，用快照让 outgoing 帧继续渲染聊天页（根治闪"我的"）
     var lastChat by remember { mutableStateOf<Api.User?>(null) }
-    var lastGroup by remember { mutableStateOf<Api.Group?>(null) }
     var inAdmin by remember { mutableStateOf(false) }
     val ctxForKick = LocalContext.current
-    // 系统返回键：在聊天/群聊/管理页时先退回主界面，而不是退出 App
-    androidx.activity.compose.BackHandler(enabled = chattingWith != null || inGroupChat != null || inAdmin) {
-        chattingWith = null; inGroupChat = null; inAdmin = false
+    // 系统返回键：分层退出，一层一层弹
+    androidx.activity.compose.BackHandler(enabled = chattingWith != null || groupStack.isNotEmpty() || inAdmin) {
+        when {
+            groupStack.isNotEmpty() -> groupStack = groupStack.dropLast(1)
+            chattingWith != null -> chattingWith = null
+            else -> inAdmin = false
+        }
     }
     LaunchedEffect(Unit) {
         ChatSocket.forceLogout.collect {
@@ -322,7 +326,7 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
                 .background(LemonColors.Bg)
         ) {
             AnimatedContent(
-                if (chattingWith != null) -2 else if (inGroupChat != null) -3 else tab,
+                if (chattingWith != null) -2 else if (groupStack.isNotEmpty()) -3 - groupStack.size else tab,
                 transitionSpec = {
                     // 进入聊天：新页从右往左切入；退出：反向
                     val dir = if (targetState > initialState) -1 else 1
@@ -332,16 +336,21 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
             ) { t ->
                 when {
                     inAdmin -> AdminPage(me = me, onBack = { inAdmin = false })
+                    t <= -3 && groupStack.isNotEmpty() -> GroupChatScreen(
+                        me = me,
+                        group = groupStack.last(),
+                        onBack = { groupStack = groupStack.dropLast(1) },
+                        onOpenGroup = { groupStack = groupStack + it }
+                    )
                     t == -2 && lastChat != null -> ChatScreen(me = me, peer = lastChat!!, onBack = { chattingWith = null })
-                    t == -3 && lastGroup != null -> GroupChatScreen(me = me, group = lastGroup!!, onBack = { inGroupChat = null })
                     t == 0 -> MessagesPage(me = me, onOpenChat = { lastChat = it; chattingWith = it })
                     t == 1 -> ContactsPage(me = me, onOpenChat = { lastChat = it; chattingWith = it })
-                    t == 2 -> TeamsPage(me = me, onOpenGroup = { lastGroup = it; inGroupChat = it })
+                    t == 2 -> TeamsPage(me = me, onOpenGroup = { groupStack = listOf(it) })
                     else -> MePage(me = me, onLogout = onLogout, onOpenAdmin = { inAdmin = true })
                 }
             }
 
-            if (chattingWith == null && inGroupChat == null && !inAdmin) {
+            if (chattingWith == null && groupStack.isEmpty() && !inAdmin) {
                 FloatingTabBar(
                     tabs = tabs,
                     selectedIndex = tab,
