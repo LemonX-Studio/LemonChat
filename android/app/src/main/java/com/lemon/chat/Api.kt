@@ -66,8 +66,8 @@ object Api {
     data class AdminUser(val id: Int, val username: String, val nickname: String, val passHash: String,
         val regIp: String, val regUa: String, val online: Boolean, val createdAt: String, val isOfficial: Boolean = false)
     data class AdminStats(val total: Int, val online: Int, val users: List<AdminUser>)
-    data class Group(val id: Int, val name: String, val owner: String, val ownerId: Int, val members: Int,
-        val gtype: String = "normal", val parentId: Int? = null, val expiresAt: Long? = null,
+    data class Group(val id: Long, val name: String, val owner: String, val ownerId: Int, val members: Int,
+        val gtype: String = "normal", val parentId: Long? = null, val expiresAt: Long? = null,
         val openJoin: Boolean = false, val isMember: Boolean = false, val code: String = "")
     data class GroupMessage(val id: Int, val senderId: Int, val content: String, val nickname: String, val time: Long,
         val avatar: String = "", val isOfficial: Boolean = false)
@@ -253,8 +253,8 @@ object Api {
 
     // ── 群聊 ──
     private fun parseGroup(o: org.json.JSONObject) = Group(
-        o.getInt("id"), o.getString("name"), o.optString("owner"), o.getInt("owner_id"), o.optInt("members", 1),
-        o.optString("gtype", "normal"), if (o.has("parent_id") && !o.isNull("parent_id")) o.optInt("parent_id") else null,
+        o.getLong("id"), o.getString("name"), o.optString("owner"), o.getInt("owner_id"), o.optInt("members", 1),
+        o.optString("gtype", "normal"), if (o.has("parent_id") && !o.isNull("parent_id")) o.getLong("parent_id") else null,
         if (o.has("expires_at") && !o.isNull("expires_at")) o.optLong("expires_at") else null,
         o.optBoolean("open_join"), o.optBoolean("isMember", true), o.optString("code", "")
     )
@@ -269,13 +269,13 @@ object Api {
             }
         }
 
-    suspend fun groupTree(rootId: Int, userId: Int): Result<Pair<Int, List<Group>>> =
+    suspend fun groupTree(rootId: Long, userId: Int): Result<Pair<Long, List<Group>>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = get("groups/tree?rootId=$rootId&userId=$userId")
                 if (!r.optBoolean("ok")) error(r.optString("error", "拉团队结构失败"))
                 val arr: JSONArray = r.getJSONArray("groups")
-                Pair(r.getInt("rootOwner"), List(arr.length()) { i -> parseGroup(arr.getJSONObject(i)) })
+                Pair(r.getLong("rootOwner"), List(arr.length()) { i -> parseGroup(arr.getJSONObject(i)) })
             }
         }
 
@@ -285,11 +285,11 @@ object Api {
                 val r = post("groups", JSONObject().put("userId", userId).put("name", name).put("gtype", gtype))
                 if (!r.optBoolean("ok")) error(r.optString("error", "建群失败"))
                 val g = r.getJSONObject("group")
-                Group(g.getInt("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype))
+                Group(g.getLong("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype))
             }
         }
 
-    suspend fun createChildGroup(userId: Int, parentId: Int, name: String, gtype: String, ttlDays: Int): Result<Group> =
+    suspend fun createChildGroup(userId: Int, parentId: Long, name: String, gtype: String, ttlDays: Int): Result<Group> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "createChild")
@@ -297,12 +297,12 @@ object Api {
                     .put("gtype", gtype).put("ttlDays", ttlDays))
                 if (!r.optBoolean("ok")) error(r.optString("error", "创建失败"))
                 val g = r.getJSONObject("group")
-                Group(g.getInt("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype),
+                Group(g.getLong("id"), g.getString("name"), "", userId, 1, g.optString("gtype", gtype),
                     code = g.optString("code", ""))
             }
         }
 
-    suspend fun ownerJoin(userId: Int, groupId: Int): Result<Unit> =
+    suspend fun ownerJoin(userId: Int, groupId: Long): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "ownerJoin").put("userId", userId).put("groupId", groupId))
@@ -311,7 +311,7 @@ object Api {
         }
 
     // 加群：null=直接进了；非null=等待群主通过的提示语
-    suspend fun joinDirect(userId: Int, groupId: Int): Result<String?> =
+    suspend fun joinDirect(userId: Int, groupId: Long): Result<String?> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "joinDirect").put("userId", userId).put("groupId", groupId))
@@ -323,7 +323,7 @@ object Api {
     data class GroupReq(val id: Int, val applicant: String, val appUsername: String, val inviter: String)
 
     // 群申请列表：Pair(是否自由加入, 待处理列表)
-    suspend fun groupRequests(userId: Int, groupId: Int): Result<Pair<Boolean, List<GroupReq>>> =
+    suspend fun groupRequests(userId: Int, groupId: Long): Result<Pair<Boolean, List<GroupReq>>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "requests").put("userId", userId).put("groupId", groupId))
@@ -355,14 +355,14 @@ object Api {
                 val root = r.getJSONObject("root")
                 val g = r.getJSONObject("group")
                 Pair(
-                    Group(root.getInt("id"), root.getString("name"), "", 0, 0),
-                    Group(g.getInt("id"), g.getString("name"), "", 0, g.optInt("members", 1),
+                    Group(root.getLong("id"), root.getString("name"), "", 0, 0),
+                    Group(g.getLong("id"), g.getString("name"), "", 0, g.optInt("members", 1),
                         g.optString("gtype", "normal"), openJoin = g.optBoolean("open_join"), code = g.optString("code", ""))
                 )
             }
         }
 
-    suspend fun setOpenJoin(userId: Int, groupId: Int, open: Boolean): Result<Unit> =
+    suspend fun setOpenJoin(userId: Int, groupId: Long, open: Boolean): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "setOpen")
@@ -371,7 +371,7 @@ object Api {
             }
         }
 
-    suspend fun groupMessages(groupId: Int, after: Int = 0): Result<List<GroupMessage>> =
+    suspend fun groupMessages(groupId: Long, after: Int = 0): Result<List<GroupMessage>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = get("groupmessages?groupId=$groupId&after=$after")
@@ -385,7 +385,7 @@ object Api {
             }
         }
 
-    suspend fun sendGroup(groupId: Int, senderId: Int, content: String): Result<Unit> =
+    suspend fun sendGroup(groupId: Long, senderId: Int, content: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groupmessages", JSONObject()
@@ -482,7 +482,7 @@ object Api {
         }
 
     // 邀请：null=直接进群了；非null=等群主通过的提示语
-    suspend fun groupInvite(userId: Int, groupId: Int, username: String): Result<String?> =
+    suspend fun groupInvite(userId: Int, groupId: Long, username: String): Result<String?> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "invite")
@@ -492,7 +492,7 @@ object Api {
             }
         }
 
-    suspend fun groupLeave(userId: Int, groupId: Int): Result<Unit> =
+    suspend fun groupLeave(userId: Int, groupId: Long): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "leave").put("userId", userId).put("groupId", groupId))
@@ -500,7 +500,7 @@ object Api {
             }
         }
 
-    suspend fun groupDissolve(userId: Int, groupId: Int): Result<Unit> =
+    suspend fun groupDissolve(userId: Int, groupId: Long): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val r = post("groups", JSONObject().put("action", "dissolve").put("userId", userId).put("groupId", groupId))

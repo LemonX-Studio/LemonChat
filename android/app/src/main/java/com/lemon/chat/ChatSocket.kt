@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 // 收到铃响的界面自己决定要不要刷新，发消息仍走 HTTP（稳）
 object ChatSocket {
     // 每条新消息发出一个 Pair(发送者id, 接收者id)
-    val events = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 16)
+    val events = MutableSharedFlow<Pair<Long, Long>>(extraBufferCapacity = 16)
     // 被管理员强制下线
     val forceLogout = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
 
@@ -47,9 +47,9 @@ object ChatSocket {
                             try {
                                 val j = JSONObject(text)
                                 when (j.optString("type")) {
-                                    "new_message" -> events.tryEmit(Pair(j.getInt("from"), j.getInt("to")))
+                                    "new_message" -> events.tryEmit(Pair(j.getLong("from"), j.getLong("to")))
                                     // 群消息用负数群号作第二个值：to = -groupId
-                                    "new_group_message" -> events.tryEmit(Pair(j.getInt("from"), -j.getInt("group")))
+                                    "new_group_message" -> events.tryEmit(Pair(j.getLong("from"), -j.getLong("group")))
                                     "force_logout" -> forceLogout.tryEmit(Unit)
                                 }
                             } catch (_: Exception) {}

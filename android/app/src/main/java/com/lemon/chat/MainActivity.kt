@@ -459,7 +459,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
     }
     LaunchedEffect(peer.id) {
         ChatSocket.start(me.id)
-        ChatSocket.events.collect { (from, to) -> if (from == peer.id || to == peer.id) tick++ }
+        ChatSocket.events.collect { (from, to) -> if (from == peer.id.toLong() || to == peer.id.toLong()) tick++ }
     }
     LaunchedEffect(peer.id, tick) {
         Api.messages(me.id, peer.id).onSuccess { msgs ->
@@ -2074,10 +2074,10 @@ fun gtypeLabel(g: String) = when (g) {
 }
 
 @Composable
-fun ChildrenDialog(me: Api.User, rootId: Int, onDismiss: () -> Unit, onOpenGroup: (Api.Group) -> Unit) {
+fun ChildrenDialog(me: Api.User, rootId: Long, onDismiss: () -> Unit, onOpenGroup: (Api.Group) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var tree by remember { mutableStateOf<Pair<Int, List<Api.Group>>?>(null) }
+    var tree by remember { mutableStateOf<Pair<Long, List<Api.Group>>?>(null) }
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(tick) {
         Api.groupTree(rootId, me.id).onSuccess { tree = it }
@@ -2092,9 +2092,9 @@ fun ChildrenDialog(me: Api.User, rootId: Int, onDismiss: () -> Unit, onOpenGroup
                 } else {
                     val (rootOwner, all) = tree!!
                     val byParent = all.groupBy { it.parentId }
-                    val amTeamOwner = rootOwner == me.id
+                    val amTeamOwner = rootOwner == me.id.toLong()
                     // 递归渲染
-                    @Composable fun renderRows(parentId: Int?, depth: Int) {
+                    @Composable fun renderRows(parentId: Long?, depth: Int) {
                         val kids = byParent[parentId] ?: return
                         kids.forEach { g ->
                             Row(
