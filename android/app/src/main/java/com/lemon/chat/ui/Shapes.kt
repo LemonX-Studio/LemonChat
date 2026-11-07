@@ -88,9 +88,9 @@ class SmoothCornerShape(
  */
 fun Modifier.smoothBorder(strokeWidth: Dp, color: Color, shape: Shape): Modifier =
     this.drawWithCache {
-        val outline = shape.createOutline(size, layoutDirection, this)
+        val path = (shape.createOutline(size, layoutDirection, this) as Outline.Generic).path
         onDrawWithContent {
             drawContent()
-            drawOutline(outline, color, style = Stroke(width = strokeWidth.toPx()))
+            drawPath(path, color, style = Stroke(width = strokeWidth.toPx()))
         }
     }

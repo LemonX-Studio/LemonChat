@@ -12,7 +12,7 @@ android {
         applicationId = "com.lemon.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 38
+        versionCode = 39
         versionName = "0.3.5"
     }
 
