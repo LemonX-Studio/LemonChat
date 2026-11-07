@@ -1,9 +1,13 @@
 package com.lemon.chat.ui
 
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -73,3 +77,20 @@ class SmoothCornerShape(
         }
     }
 }
+
+/**
+ * 连续曲率形状专用描边。
+ *
+ * 不能用系统 Modifier.border()：它遇到非 CornerBasedShape 的轮廓时，会先创建一张
+ * 与组件同尺寸的 ImageBitmap 再描边，组件首帧尺寸为 0 时就抛
+ * "width and height must be > 0" 崩溃（安卓 9 上已实锤）。
+ * 这里直接用矢量轮廓描边，零位图分配、无尺寸限制。
+ */
+fun Modifier.smoothBorder(strokeWidth: Dp, color: Color, shape: Shape): Modifier =
+    this.drawWithCache {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        onDrawWithContent {
+            drawContent()
+            drawOutline(outline, color, style = Stroke(width = strokeWidth.toPx()))
+        }
+    }

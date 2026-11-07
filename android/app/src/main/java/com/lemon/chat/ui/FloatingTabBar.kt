@@ -43,7 +43,7 @@ fun FloatingTabBar(
             )
             .clip(SmoothCornerShape(1000.dp))
             .background(LemonColors.Glass)
-            .border(1.dp, Color(0x66FFFFFF), SmoothCornerShape(1000.dp))
+            .smoothBorder(1.dp, Color(0x66FFFFFF), SmoothCornerShape(1000.dp))
     ) {
         val slotW = maxWidth / tabs.size
 
@@ -69,7 +69,7 @@ fun FloatingTabBar(
                         listOf(Color(0xF2FFFFFF), Color(0xD84FD98A))
                     )
                 )
-                .border(1.dp, Color(0x88FFFFFF), SmoothCornerShape(1000.dp))
+                .smoothBorder(1.dp, Color(0x88FFFFFF), SmoothCornerShape(1000.dp))
         )
 
         Row(Modifier.fillMaxSize()) {
