@@ -1,7 +1,6 @@
 package com.lemon.chat.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -23,11 +22,13 @@ object LemonColors {
     val Danger = Color(0xFFE5484D)
 }
 
+// ── 全部连续曲率（squircle），全 APP 不允许非连续曲率或方角 ──
 object LemonShapes {
-    val card = RoundedCornerShape(20.dp)
-    val bubble = RoundedCornerShape(18.dp)
-    val input = RoundedCornerShape(14.dp)
-    val pill = RoundedCornerShape(50)
+    val card = SmoothCornerShape(20.dp)
+    val bubble = SmoothCornerShape(18.dp)
+    val input = SmoothCornerShape(14.dp)
+    // 胶囊/圆头像：超大半径 → 锚点顶满短边一半，曲率连续的 squircle 胶囊
+    val pill = SmoothCornerShape(1000.dp)
 }
 
 @Composable

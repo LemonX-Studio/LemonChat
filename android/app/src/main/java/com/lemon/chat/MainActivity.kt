@@ -9,7 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.ModalBottomSheet
@@ -27,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -519,7 +517,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                             Modifier
                                 .widthIn(max = 250.dp)
                                 .clip(
-                                    RoundedCornerShape(
+                                    SmoothCornerShape(
                                         topStart = 18.dp, topEnd = 18.dp,
                                         bottomStart = if (mine) 18.dp else 4.dp,
                                         bottomEnd = if (mine) 4.dp else 18.dp
@@ -673,7 +671,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         Spacer(Modifier.weight(1f))
                         if (reqCount > 0) {
                             Box(
-                                Modifier.clip(CircleShape).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
+                                Modifier.clip(LemonShapes.pill).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
                             ) { Text("$reqCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                         }
                         Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
@@ -1674,7 +1672,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                                 Modifier
                                     .widthIn(max = 250.dp)
                                     .clip(
-                                        RoundedCornerShape(
+                                        SmoothCornerShape(
                                             topStart = 18.dp, topEnd = 18.dp,
                                             bottomStart = if (mine) 18.dp else 4.dp,
                                             bottomEnd = if (mine) 4.dp else 18.dp
@@ -1879,7 +1877,7 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
         } else null
     }
     Box(
-        Modifier.size(size.dp).clip(CircleShape).background(LemonColors.GreenLight),
+        Modifier.size(size.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
         contentAlignment = Alignment.Center
     ) {
         if (bmp != null) {
