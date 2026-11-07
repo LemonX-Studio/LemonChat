@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.lemon.chat.ui.SmoothCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -38,12 +38,12 @@ fun FloatingTabBar(
             .fillMaxWidth()
             .height(66.dp)
             .shadow(
-                14.dp, RoundedCornerShape(50),
+                14.dp, SmoothCornerShape(1000.dp),
                 ambientColor = Color(0x3322A45D), spotColor = Color(0x5522A45D)
             )
-            .clip(RoundedCornerShape(50))
+            .clip(SmoothCornerShape(1000.dp))
             .background(LemonColors.Glass)
-            .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(50))
+            .border(1.dp, Color(0x66FFFFFF), SmoothCornerShape(1000.dp))
     ) {
         val slotW = maxWidth / tabs.size
 
@@ -63,13 +63,13 @@ fun FloatingTabBar(
                 .width(slotW)
                 .fillMaxHeight()
                 .padding(horizontal = 6.dp, vertical = 7.dp)
-                .clip(RoundedCornerShape(50))
+                .clip(SmoothCornerShape(1000.dp))
                 .background(
                     Brush.linearGradient(
                         listOf(Color(0xF2FFFFFF), Color(0xD84FD98A))
                     )
                 )
-                .border(1.dp, Color(0x88FFFFFF), RoundedCornerShape(50))
+                .border(1.dp, Color(0x88FFFFFF), SmoothCornerShape(1000.dp))
         )
 
         Row(Modifier.fillMaxSize()) {
