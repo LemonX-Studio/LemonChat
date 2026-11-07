@@ -41,11 +41,8 @@ fun LemonChatTheme(content: @Composable () -> Unit) {
             surface = LemonColors.Card,
             error = LemonColors.Danger
         ),
-        shapes = Shapes(
-            small = LemonShapes.input,
-            medium = LemonShapes.card,
-            large = LemonShapes.card
-        ),
+        // Material 默认 shapes 要求 CornerBasedShape（不连续曲率），与我们全连续曲率原则冲突；
+        // 项目内所有圆角一律走 LemonShapes，故不注入 Material shapes
         content = content
     )
 }
