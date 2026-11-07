@@ -55,6 +55,12 @@ class MainActivity : ComponentActivity() {
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             try {
                 val trace = android.util.Log.getStackTraceString(e)
+                // 私有外部目录：无需权限，文件管理器可读 Android/data/com.lemon.chat/files/crash.txt
+                try {
+                    getExternalFilesDir(null)?.let { d ->
+                        java.io.File(d, "crash.txt").writeText(trace)
+                    }
+                } catch (_: Exception) {}
                 try {
                     java.io.File(android.os.Environment.getExternalStorageDirectory(), "lemonchat_crash.txt")
                         .writeText(trace)
