@@ -35,12 +35,26 @@ class SmoothCornerShape(
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val half = min(size.width, size.height) / 2f
-        fun anchor(r: Dp) = min(with(density) { r.toPx() } * spread, half)
-        val aTL = anchor(topStart)
-        val aTR = anchor(topEnd)
-        val aBR = anchor(bottomEnd)
-        val aBL = anchor(bottomStart)
+        val w = size.width
+        val h = size.height
+        fun anchor(r: Dp) = with(density) { r.toPx() } * spread
+        var aTL = anchor(topStart)
+        var aTR = anchor(topEnd)
+        var aBR = anchor(bottomEnd)
+        var aBL = anchor(bottomStart)
+
+        // 防自交关键：同一条边上相邻两角锚点之和不得超过边长，超了按比例收缩。
+        // 否则小尺寸组件（方形头像等）路径交叉、非零填充正负抵消，背景直接塌掉变白。
+        fun fit(x: Float, y: Float, max: Float): Pair<Float, Float> {
+            val s = x + y
+            return if (s > max && s > 0f) { val k = max / s; x * k to y * k } else x to y
+        }
+        repeat(3) {
+            var p = fit(aTL, aTR, w); aTL = p.first; aTR = p.second
+            p = fit(aTR, aBR, h); aTR = p.first; aBR = p.second
+            p = fit(aBR, aBL, w); aBR = p.first; aBL = p.second
+            p = fit(aBL, aTL, h); aBL = p.first; aTL = p.second
+        }
 
         val path = Path()
         path.moveTo(aTL, 0f) // 左上角出口锚点

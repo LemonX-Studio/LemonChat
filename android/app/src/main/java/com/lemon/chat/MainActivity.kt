@@ -21,6 +21,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -79,6 +80,7 @@ class MainActivity : ComponentActivity() {
             oldHandler?.uncaughtException(t, e)
         }
         enableEdgeToEdge()
+        LemonLog.log("app", "onCreate 启动")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
@@ -454,7 +456,7 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         Column(Modifier.weight(1f)) {
                             if (c.isOfficial) OfficialName(c.nickname) else Text(c.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = LemonColors.TextMain)
                             Text(
-                                (if (c.lastFromMe) "我：" else "") + c.lastMsg,
+                                (if (c.lastFromMe) "我：" else "") + previewOf(c.lastMsg),
                                 fontSize = 13.sp, color = LemonColors.TextSub, maxLines = 1
                             )
                         }
@@ -1917,22 +1919,106 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
     }
 }
 
-// 消息内容：文本 或 base64 图片
+// ── LemonLog：写 /sdcard/lemonchat_log.txt 供 Log-LC 查看 ──
+object LemonLog {
+    @Volatile var enabled = true
+    fun log(tag: String, msg: String) {
+        if (!enabled) return
+        try {
+            val f = java.io.File(android.os.Environment.getExternalStorageDirectory(), "lemonchat_log.txt")
+            val ts = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.CHINA).format(java.util.Date())
+            f.appendText("[$ts][$tag] $msg\n")
+        } catch (_: Exception) {}
+    }
+}
+
+// 会话列表预览：多媒体消息显示摘要而不是 base64 长串
+fun previewOf(content: String): String = when {
+    content.startsWith("data:image/") -> "[图片]"
+    content.startsWith("data:video/") -> "[视频]"
+    else -> content
+}
+
+// base64 dataURL 保存到相册目录 /sdcard/lemonchat_pictures
+fun saveDataUrlToGallery(ctx: android.content.Context, dataUrl: String): Boolean {
+    return runCatching {
+        val mime = dataUrl.substringBefore(";").removePrefix("data:")
+        val ext = if (mime.contains("png")) "png" else "jpg"
+        val bytes = android.util.Base64.decode(dataUrl.substringAfter("base64,"), android.util.Base64.DEFAULT)
+        val dir = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(
+            android.os.Environment.DIRECTORY_PICTURES), "LemonChat")
+        if (!dir.exists()) dir.mkdirs()
+        val f = java.io.File(dir, "lemon_${System.currentTimeMillis()}.$ext")
+        f.writeBytes(bytes)
+        // 刷新相册索引
+        val intent = android.content.Intent(android.content.Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+        intent.data = android.net.Uri.fromFile(f)
+        ctx.sendBroadcast(intent)
+        true
+    }.getOrDefault(false)
+}
+
+// 消息内容：文本 / 图片 / 视频
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MsgContent(content: String, mine: Boolean) {
-    if (content.startsWith("data:image/")) {
-        val bmp = remember(content) {
-            runCatching {
-                val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            }.getOrNull()
+    val ctx = LocalContext.current
+    var showPreview by remember { mutableStateOf(false) }
+    when {
+        content.startsWith("data:image/") -> {
+            val bmp = remember(content) {
+                runCatching {
+                    val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                }.onFailure { LemonLog.log("img", "解码失败 len=${content.length} ${it.message}") }
+                .getOrNull()
+            }
+            if (bmp != null) {
+                Image(
+                    bmp, null,
+                    Modifier.widthIn(max = 200.dp).heightIn(max = 260.dp).fillMaxWidth()
+                        .clip(LemonShapes.card)
+                        .combinedClickable(
+                            onClick = { showPreview = true },
+                            onLongClick = {
+                                if (saveDataUrlToGallery(ctx, content))
+                                    Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
+                                else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+                            }
+                        ),
+                    contentScale = ContentScale.FillWidth
+                )
+                if (showPreview) {
+                    androidx.compose.ui.window.Dialog(onDismissRequest = { showPreview = false }) {
+                        Box(Modifier.fillMaxWidth().clickable { showPreview = false }, contentAlignment = Alignment.Center) {
+                            Image(bmp, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
+                        }
+                    }
+                }
+            } else Text("[图片]", color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
         }
-        if (bmp != null) {
-            val ratio = bmp.height.toFloat() / bmp.width.coerceAtLeast(1)
-            Image(bmp, null, Modifier.widthIn(max = 200.dp).heightIn(max = 260.dp).fillMaxWidth(), contentScale = ContentScale.FillWidth)
-        } else Text("[图片]", color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
-    } else {
-        Text(content, color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
+        content.startsWith("data:video/") -> {
+            Row(
+                Modifier.clickable {
+                    runCatching {
+                        val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                        val f = java.io.File(ctx.cacheDir, "video_${System.currentTimeMillis()}.mp4")
+                        f.writeBytes(bytes)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+                        val i = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "video/mp4"); addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        ctx.startActivity(i)
+                    }.onFailure { LemonLog.log("video", "播放失败 ${it.message}") }
+                },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.PlayCircle, null, tint = if (mine) Color.White else LemonColors.Green, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("[视频] 点击播放", color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
+            }
+        }
+        else -> Text(content, color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
     }
 }
 
@@ -1953,10 +2039,23 @@ fun compressImage(ctx: android.content.Context, uri: Uri): String? {
 }
 
 // 聊天输入栏（文本 + 加号图片面板）
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, sending: Boolean) {
     val ctx = LocalContext.current
+    val videoLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            // 视频走 base64（限 8MB，与图片同一发送通道）
+            val data = runCatching {
+                val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+                if (bytes.size > 8 * 1024 * 1024) { Toast.makeText(ctx, "视频超过8MB，发不了哦", Toast.LENGTH_SHORT).show(); null }
+                else "data:video/mp4;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            }.getOrNull()
+            if (data != null) onSendImage(data)
+        }
+    }
     var input by remember { mutableStateOf("") }
     var showPanel by remember { mutableStateOf(false) }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -2042,6 +2141,18 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
                         contentAlignment = Alignment.Center
                     ) { Icon(Icons.Filled.PhotoLibrary, null, tint = LemonColors.Green, modifier = Modifier.size(26.dp)) }
                     Text("相册", fontSize = 12.sp, color = LemonColors.TextSub)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                            .clickable {
+                                showPanel = false
+                                videoLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
+                                    androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly))
+                            },
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Filled.Videocam, null, tint = LemonColors.Green, modifier = Modifier.size(26.dp)) }
+                    Text("视频", fontSize = 12.sp, color = LemonColors.TextSub)
                 }
             }
             Spacer(Modifier.height(30.dp))
