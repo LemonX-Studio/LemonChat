@@ -50,10 +50,33 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 崩溃自曝：任何未捕获异常 → 全屏显示错误详情（用户拍照发回定位），并写入 /sdcard
+        val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try {
+                val trace = android.util.Log.getStackTraceString(e)
+                try {
+                    java.io.File(android.os.Environment.getExternalStorageDirectory(), "lemonchat_crash.txt")
+                        .writeText(trace)
+                } catch (_: Exception) {}
+                runOnUiThread {
+                    android.widget.TextView(this).let { tv ->
+                        tv.text = "Lemon Chat 崩溃详情\n\n$trace"
+                        tv.setPadding(40, 80, 40, 40)
+                        tv.textSize = 12f
+                        tv.movementMethod = android.text.method.ScrollingMovementMethod()
+                        setContentView(tv)
+                    }
+                }
+                Thread.sleep(500)
+            } catch (_: Exception) {}
+            oldHandler?.uncaughtException(t, e)
+        }
         enableEdgeToEdge()
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
-            android.Manifest.permission.CAMERA
+            android.Manifest.permission.CAMERA,
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
         ).filter {
             androidx.core.content.ContextCompat.checkSelfPermission(this, it) !=
                 android.content.pm.PackageManager.PERMISSION_GRANTED
