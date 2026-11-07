@@ -246,8 +246,8 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
                     }
                 }
                 TextButton(onClick = {
-                    val intent = android.content.Intent("com.lemonchat.adminpassid.CONFIRM")
-                        .setPackage("com.lemonchat.adminpassid")
+                    val intent = android.content.Intent("com.lemonchat.passid.CONFIRM")
+                        .setPackage("com.lemonchat.passid")
                     try {
                         passLauncher.launch(intent)
                     } catch (_: Exception) {
