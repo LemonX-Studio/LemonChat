@@ -97,7 +97,9 @@ class SmoothCornerShape(
     ) {
         val steps = 14
         for (i in 1..steps) {
-            val t = Math.PI * i / steps
+            // t 只能走 0→π/2：cos(t) 在 (π/2, π] 为负，负数的 4.5 次幂 = NaN，
+            // NaN 会污染整条路径（裁剪区域变空 = 组件整个隐身，安卓 9 白屏元凶）
+            val t = Math.PI * 0.5 * i / steps
             val u = (a * cos(t).pow(4.5)).toFloat() // 沿进入边，从 a 收到 0
             val v = (a * sin(t).pow(4.5)).toFloat() // 沿离开边，从 0 涨到 a
             path.lineTo(cx - u * inx + v * outx, cy - u * iny + v * outy)

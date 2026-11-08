@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         LemonLog.clear()
-        LemonLog.log("app", "onCreate v0.3.7 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
+        LemonLog.log("app", "onCreate v0.3.8 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
