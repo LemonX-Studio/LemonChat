@@ -6,7 +6,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.drawscope.drawOutline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -136,9 +135,15 @@ fun Modifier.smoothBorder(strokeWidth: Dp, color: Color, shape: Shape): Modifier
             onDrawWithContent { drawContent() }
         } else {
             val outline = shape.createOutline(size, layoutDirection, this)
+            val strokePath = Path()
+            when (outline) {
+                is Outline.Rounded -> strokePath.addRoundRect(outline.roundRect)
+                is Outline.Rectangle -> strokePath.addRect(outline.rect)
+                is Outline.Generic -> strokePath.addPath(outline.path)
+            }
             onDrawWithContent {
                 drawContent()
-                drawOutline(outline, color, style = Stroke(width = strokeWidth.toPx()))
+                drawPath(strokePath, color, style = Stroke(width = strokeWidth.toPx()))
             }
         }
     }
