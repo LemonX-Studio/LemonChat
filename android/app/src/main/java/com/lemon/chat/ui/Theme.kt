@@ -22,18 +22,18 @@ object LemonColors {
     val Danger = Color(0xFFE5484D)
 }
 
-// ── 全部连续曲率（squircle），全 APP 不允许非连续曲率或方角 ──
+// ── 全部使用系统标准圆角（RoundedCornerShape），稳定第一 ──
 object LemonShapes {
-    val card = SmoothCornerShape(20.dp)
-    val bubble = SmoothCornerShape(18.dp)
-    val input = SmoothCornerShape(14.dp)
-    // 胶囊/圆头像：超大半径 → 锚点顶满短边一半，曲率连续的 squircle 胶囊
-    val pill = SmoothCornerShape(1000.dp)
+    val card = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    val bubble = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
+    val input = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    // 胶囊/圆头像：50% 百分比圆角 = 圆形/胶囊
+    val pill = androidx.compose.foundation.shape.RoundedCornerShape(50)
 
-    // Material 组件同样恢复连续曲率（路径 NaN 修复后 outline 裁剪恢复正常）
-    val matCard = SmoothCornerShape(20.dp)
-    val matInput = SmoothCornerShape(14.dp)
-    val matPill = SmoothCornerShape(1000.dp)
+    // Material 组件同款
+    val matCard = card
+    val matInput = input
+    val matPill = pill
 }
 
 @Composable

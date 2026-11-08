@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         LemonLog.clear()
-        LemonLog.log("app", "onCreate v0.4.0 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
+        LemonLog.log("app", "onCreate v0.4.1 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
@@ -197,7 +197,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
             Box(
                 Modifier
                     .size(96.dp)
-                    .squircleClip(LemonShapes.card)
+                    .clip(LemonShapes.card)
                     .background(Brush.linearGradient(listOf(LemonColors.Green, LemonColors.GreenDark))),
                 contentAlignment = Alignment.Center
             ) { Text("🍋", fontSize = 48.sp) }
@@ -453,7 +453,7 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(48.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
+                            Modifier.size(48.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
                             contentAlignment = Alignment.Center
                         ) { Text(c.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
                         Spacer(Modifier.width(12.dp))
@@ -698,7 +698,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                 item {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
-                            .squircleClip(LemonShapes.card).background(Color(0xFFEAF6FF))
+                            .clip(LemonShapes.card).background(Color(0xFFEAF6FF))
                             .clickable { showRequests = true }.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -708,7 +708,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         Spacer(Modifier.weight(1f))
                         if (reqCount > 0) {
                             Box(
-                                Modifier.squircleClip(LemonShapes.pill).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
+                                Modifier.clip(LemonShapes.pill).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
                             ) { Text("$reqCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                         }
                         Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
@@ -744,7 +744,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
             onDismissRequest = { viewProfile = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
+                    Box(Modifier.size(44.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
                         contentAlignment = Alignment.Center) {
                         Text(p.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
                     }
@@ -816,7 +816,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
-                                Modifier.size(38.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
+                                Modifier.size(38.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
                                 contentAlignment = Alignment.Center
                             ) { Text(u.nickname.take(1), fontSize = 16.sp, color = LemonColors.Green) }
                             Spacer(Modifier.width(10.dp))
@@ -950,7 +950,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             } else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
         } }
         Box(
-            Modifier.size(84.dp).squircleClip(LemonShapes.pill).clickable {
+            Modifier.size(84.dp).clip(LemonShapes.pill).clickable {
                 avatarPicker.launch(androidx.activity.result.PickVisualMediaRequest(
                     androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
             }.background(LemonColors.GreenLight),
@@ -971,7 +971,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         if (me.isOfficial) {
             // 官方专属认证简介卡
             Row(
-                Modifier.fillMaxWidth().squircleClip(LemonShapes.card).background(Color(0xFFEAF6FF)).padding(14.dp),
+                Modifier.fillMaxWidth().clip(LemonShapes.card).background(Color(0xFFEAF6FF)).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OfficialBadge(18)
@@ -993,7 +993,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         var notifyOn by remember { mutableStateOf(prefs.getBoolean("notify_enabled", true)) }
 
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
                 .background(Color.White).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1009,7 +1009,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             )
         }
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
                 .background(Color.White).clickable { showSecInfo = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1018,7 +1018,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             Text("账号与密保", fontSize = 15.sp, color = LemonColors.TextMain)
         }
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
                 .background(Color.White).clickable { showAbout = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1080,7 +1080,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         }
         // 黑名单
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
                 .background(Color.White).clickable { showBlacklist = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1095,7 +1095,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .padding(vertical = 6.dp)
-                    .squircleClip(LemonShapes.card)
+                    .clip(LemonShapes.card)
                     .background(Color(0xFFEAF6FF))
                     .clickable { onOpenAdmin() }
                     .padding(16.dp),
@@ -1189,10 +1189,10 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
                 items(st.users) { u ->
                     Column(
                         Modifier.fillMaxWidth().padding(vertical = 5.dp)
-                            .squircleClip(LemonShapes.card).background(Color.White).padding(14.dp)
+                            .clip(LemonShapes.card).background(Color.White).padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).squircleClip(LemonShapes.pill)
+                            Box(Modifier.size(8.dp).clip(LemonShapes.pill)
                                 .background(if (u.online) Color(0xFF34C759) else Color(0xFFC7C7CC)))
                             Spacer(Modifier.width(8.dp))
                             if (u.isOfficial) OfficialName(u.nickname, 15)
@@ -1263,7 +1263,7 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
 @Composable
 fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
-        modifier.squircleClip(LemonShapes.card).background(Color.White).padding(16.dp)
+        modifier.clip(LemonShapes.card).background(Color.White).padding(16.dp)
     ) {
         Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
         Text(label, fontSize = 12.sp, color = LemonColors.TextSub)
@@ -1418,7 +1418,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                 items(groups.size) { i ->
                     val g = groups[i]
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
                             .background(Color.White)
                             .pointerInput(g.id) {
                                 detectTapGestures(
@@ -1429,7 +1429,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(46.dp).squircleClip(LemonShapes.pill).background(
+                            Modifier.size(46.dp).clip(LemonShapes.pill).background(
                                 if (g.gtype == "team") Color(0xFF34A853) else LemonColors.GreenLight
                             ),
                             contentAlignment = Alignment.Center
@@ -1441,7 +1441,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                                 if (g.gtype == "team") {
                                     Spacer(Modifier.width(6.dp))
                                     Text("团队", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.squircleClip(LemonShapes.pill).background(Color(0xFF34A853)).padding(horizontal = 5.dp, vertical = 1.dp))
+                                        modifier = Modifier.clip(LemonShapes.pill).background(Color(0xFF34A853)).padding(horizontal = 5.dp, vertical = 1.dp))
                                 }
                             }
                             Text("群号 ${g.id} · ${g.members} 人", fontSize = 12.sp, color = LemonColors.TextSub)
@@ -1478,7 +1478,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("normal" to "普通群聊", "team" to "团队群聊").forEach { (t, label) ->
                             Box(
-                                Modifier.squircleClip(LemonShapes.pill)
+                                Modifier.clip(LemonShapes.pill)
                                     .background(if (newGtype == t) LemonColors.Green else Color(0xFFEDF3EF))
                                     .clickable { newGtype = t }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -1649,7 +1649,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                     Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
                     if (group.gtype != "normal") {
                         Spacer(Modifier.width(6.dp))
-                        Box(Modifier.squircleClip(LemonShapes.pill).background(LemonColors.GreenLight).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                        Box(Modifier.clip(LemonShapes.pill).background(LemonColors.GreenLight).padding(horizontal = 6.dp, vertical = 1.dp)) {
                             Text(gtypeLabel(group.gtype), fontSize = 10.sp, color = LemonColors.Green, fontWeight = FontWeight.SemiBold)
                         }
                     }
@@ -1919,7 +1919,7 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
         } else null
     }
     Box(
-        Modifier.size(size.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
+        Modifier.size(size.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
         contentAlignment = Alignment.Center
     ) {
         if (bmp != null) {
@@ -2012,7 +2012,7 @@ fun MsgContent(content: String, mine: Boolean) {
                 Image(
                     bmp, null,
                     Modifier.widthIn(max = 200.dp).heightIn(max = 260.dp).fillMaxWidth()
-                        .squircleClip(LemonShapes.card)
+                        .clip(LemonShapes.card)
                         .combinedClickable(
                             onClick = { showPreview = true },
                             onLongClick = {
@@ -2154,7 +2154,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 val file = java.io.File(ctx.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
                                 val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
@@ -2168,7 +2168,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 showPanel = false
                                 albumLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
@@ -2180,7 +2180,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 showPanel = false
                                 videoLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
@@ -2278,7 +2278,7 @@ fun ChildrenDialog(me: Api.User, rootId: Long, onDismiss: () -> Unit, onOpenGrou
                                 Text(
                                     gtypeLabel(g.gtype), fontSize = 9.sp,
                                     color = Color.White, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.squircleClip(LemonShapes.pill)
+                                    modifier = Modifier.clip(LemonShapes.pill)
                                         .background(if (g.gtype == "temp") Color(0xFFFF9800) else LemonColors.Green)
                                         .padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
@@ -2341,7 +2341,7 @@ fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("dept" to "部门群", "sub" to "小组群", "temp" to "临时群").forEach { (t, label) ->
                         Box(
-                            Modifier.squircleClip(LemonShapes.pill)
+                            Modifier.clip(LemonShapes.pill)
                                 .background(if (gtype == t) LemonColors.Green else Color(0xFFEDF3EF))
                                 .clickable { gtype = t }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -2361,7 +2361,7 @@ fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         ttlOptions.forEach { (d, label) ->
                             Box(
-                                Modifier.squircleClip(LemonShapes.pill)
+                                Modifier.clip(LemonShapes.pill)
                                     .background(if (ttl == d) LemonColors.Green else Color(0xFFEDF3EF))
                                     .clickable { ttl = d }
                                     .padding(horizontal = 8.dp, vertical = 5.dp)
