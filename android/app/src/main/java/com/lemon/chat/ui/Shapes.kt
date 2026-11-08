@@ -18,17 +18,16 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
-// 连续曲率圆角（squircle）
-// 普通圆角是"直边 + 圆弧"，交界处曲率从 0 突然跳到 1/r，眼睛能看出折点；
-// 这里用幂次曲线 u=a·cos^m(t), v=a·sin^m(t)（m=4.5），曲率从 0 平滑爬升再平滑收回，
-// 与直边、与对角方向都是连续过渡，全程无方角、无曲率折点。
-// 锚点外扩：曲线起点在距角点 a=r×1.6 的直边上，小圆角也能平滑融入直边。
+// 超椭圆（superellipse）圆角
+// 角部曲线就是标准超椭圆 |u/a|^n + |v/a|^n = 1（n=4.5）上从 (a,0) 到 (0,a) 的那段，
+// 参数化采样：u=a·cos^(2/n)(t), v=a·sin^(2/n)(t)。锚点不外扩（起点在距角 a 处），
+// 采样 40 点保证平滑无折线。
 class SmoothCornerShape(
     private val topStart: Dp,
     private val topEnd: Dp,
     private val bottomEnd: Dp,
     private val bottomStart: Dp,
-    private val spread: Float = 1.6f, // 锚点外扩倍数
+    private val spread: Float = 1.0f, // 超椭圆不需要外扩
 ) : Shape {
     constructor(radius: Dp) : this(radius, radius, radius, radius)
 
@@ -95,13 +94,13 @@ class SmoothCornerShape(
         inx: Float = 0f, iny: Float = 0f,
         outx: Float = 0f, outy: Float = 0f,
     ) {
-        val steps = 14
+        val steps = 40
+        // 标准超椭圆：u=a·cos^(2/n)(t)，n=4.5。外鼓凸曲线，t 只走 0→π/2（负数的分数次幂=NaN）
+        val m = 2.0 / 4.5
         for (i in 1..steps) {
-            // t 只能走 0→π/2：cos(t) 在 (π/2, π] 为负，负数的 4.5 次幂 = NaN，
-            // NaN 会污染整条路径（裁剪区域变空 = 组件整个隐身，安卓 9 白屏元凶）
             val t = Math.PI * 0.5 * i / steps
-            val u = (a * cos(t).pow(4.5)).toFloat() // 沿进入边，从 a 收到 0
-            val v = (a * sin(t).pow(4.5)).toFloat() // 沿离开边，从 0 涨到 a
+            val u = (a * cos(t).pow(m)).toFloat() // 沿进入边，从 a 收到 0
+            val v = (a * sin(t).pow(m)).toFloat() // 沿离开边，从 0 涨到 a
             path.lineTo(cx - u * inx + v * outx, cy - u * iny + v * outy)
         }
     }
