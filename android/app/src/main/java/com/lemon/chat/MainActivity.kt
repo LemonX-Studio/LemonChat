@@ -2068,7 +2068,7 @@ fun FullscreenMediaPreview(media: List<String>, initialIndex: Int, onDismiss: ()
                             mmr.setDataSource(f.absolutePath)
                             val fr = mmr.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.asImageBitmap()
                             mmr.release()
-                            fr to f
+                            if (fr != null) fr to f else null
                         }.getOrNull()
                     }
                     Box(Modifier.fillMaxSize().pointerInput(c) {
