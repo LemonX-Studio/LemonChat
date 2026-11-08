@@ -1601,8 +1601,8 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
 // ══════════════ 群聊窗口 ══════════════
 // ══════════════ 群聊窗口（新版） ══════════════
 @Composable
-fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGroup: (Api.Group) -> Unit = {
-    Dbg("GroupChatScreen gid=${group.id}")}) {
+fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGroup: (Api.Group) -> Unit = {}) {
+    Dbg("GroupChatScreen gid=${group.id}")
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.GroupMessage>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
