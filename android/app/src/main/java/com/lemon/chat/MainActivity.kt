@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         LemonLog.clear()
-        LemonLog.log("app", "onCreate v0.4.1 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
+        LemonLog.log("app", "onCreate v0.4.2 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
@@ -553,7 +553,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                             Modifier
                                 .widthIn(max = 250.dp)
                                 .clip(
-                                    SmoothCornerShape(
+                                    RoundedCornerShape(
                                         topStart = 18.dp, topEnd = 18.dp,
                                         bottomStart = if (mine) 18.dp else 4.dp,
                                         bottomEnd = if (mine) 4.dp else 18.dp
@@ -1713,7 +1713,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                                 Modifier
                                     .widthIn(max = 250.dp)
                                     .clip(
-                                        SmoothCornerShape(
+                                        RoundedCornerShape(
                                             topStart = 18.dp, topEnd = 18.dp,
                                             bottomStart = if (mine) 18.dp else 4.dp,
                                             bottomEnd = if (mine) 4.dp else 18.dp

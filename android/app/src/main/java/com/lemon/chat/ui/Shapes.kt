@@ -134,11 +134,10 @@ fun Modifier.smoothBorder(strokeWidth: Dp, color: Color, shape: Shape): Modifier
         if (size.isEmpty()) {
             onDrawWithContent { drawContent() }
         } else {
-            val path = (shape.createOutline(size, layoutDirection, this) as? Outline.Generic)?.path
-            if (path == null) onDrawWithContent { drawContent() }
-            else onDrawWithContent {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            onDrawWithContent {
                 drawContent()
-                drawPath(path, color, style = Stroke(width = strokeWidth.toPx()))
+                drawOutline(outline, color, style = Stroke(width = strokeWidth.toPx()))
             }
         }
     }

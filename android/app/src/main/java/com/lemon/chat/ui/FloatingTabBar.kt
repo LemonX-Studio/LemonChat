@@ -3,12 +3,11 @@ package com.lemon.chat.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.lemon.chat.Dbg
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import com.lemon.chat.Dbg
-import com.lemon.chat.ui.*
-import com.lemon.chat.ui.SmoothCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -41,12 +40,12 @@ fun FloatingTabBar(
             .fillMaxWidth()
             .height(66.dp)
             .shadow(
-                14.dp, SmoothCornerShape(1000.dp),
+                14.dp, RoundedCornerShape(50),
                 ambientColor = Color(0x3322A45D), spotColor = Color(0x5522A45D)
             )
-            .clip(SmoothCornerShape(1000.dp))
+            .clip(RoundedCornerShape(50))
             .background(LemonColors.Glass)
-            .smoothBorder(1.dp, Color(0x66FFFFFF), SmoothCornerShape(1000.dp))
+            .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(50))
     ) {
         val slotW = maxWidth / tabs.size
 
@@ -66,13 +65,13 @@ fun FloatingTabBar(
                 .width(slotW)
                 .fillMaxHeight()
                 .padding(horizontal = 6.dp, vertical = 7.dp)
-                .clip(SmoothCornerShape(1000.dp))
+                .clip(RoundedCornerShape(50))
                 .background(
                     Brush.linearGradient(
                         listOf(Color(0xF2FFFFFF), Color(0xD84FD98A))
                     )
                 )
-                .smoothBorder(1.dp, Color(0x88FFFFFF), SmoothCornerShape(1000.dp))
+                .border(1.dp, Color(0x88FFFFFF), RoundedCornerShape(50))
         )
 
         Row(Modifier.fillMaxSize()) {
