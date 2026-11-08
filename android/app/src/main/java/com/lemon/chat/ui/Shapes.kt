@@ -1,5 +1,6 @@
 package com.lemon.chat.ui
 
+import com.lemon.chat.LemonLog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
@@ -37,6 +38,11 @@ class SmoothCornerShape(
     ): Outline {
         val w = size.width
         val h = size.height
+        // 尺寸异常防护：0/负数/NaN 一律回退空矩形，绝不产出坏路径
+        if (!(w > 0f && h > 0f) || w.isNaN() || h.isNaN() || w.isInfinite() || h.isInfinite()) {
+            LemonLog.log("shape", "SmoothCornerShape BAD-SIZE ${w}x${h}")
+            return Outline.Generic(Path().apply { addRect(androidx.compose.ui.geometry.Rect(0f, 0f, w.coerceAtLeast(0f), h.coerceAtLeast(0f))) })
+        }
         fun anchor(r: Dp) = with(density) { r.toPx() } * spread
         var aTL = anchor(topStart)
         var aTR = anchor(topEnd)
@@ -54,6 +60,12 @@ class SmoothCornerShape(
             p = fit(aTR, aBR, h); aTR = p.first; aBR = p.second
             p = fit(aBR, aBL, w); aBR = p.first; aBL = p.second
             p = fit(aBL, aTL, h); aBL = p.first; aTL = p.second
+        }
+
+        // 探针：同一尺寸只报一次（防刷屏），能看清每个组件拿到什么尺寸
+        if (LemonLog.enabled) {
+            val key = "scs ${w.toInt()}x${h.toInt()}"
+            LemonLog.once(key, "shape", "outline size=${w.toInt()}x${h.toInt()} aTL=${aTL.toInt()}")
         }
 
         val path = Path()
@@ -92,6 +104,21 @@ class SmoothCornerShape(
     }
 }
 
+// ── 画布级 squircle 裁剪 ──
+// 不用 Modifier.clip()：它走 RenderNode outline 裁剪通道，安卓 9 的硬件渲染对
+// 自绘曲线路径的 outline 裁剪不可靠（会静默把内容裁没 = 全白）。
+// 这里改为 DrawScope 的 canvas.clipPath，所有安卓版本行为一致。
+fun Modifier.squircleClip(shape: Shape): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    onDrawWithContent {
+        when (outline) {
+            is Outline.Generic -> clipPath(outline.path) { this@onDrawWithContent.drawContent() }
+            is Outline.Rounded -> clipPath(Path().apply { addRoundRect(outline.roundRect) }) { this@onDrawWithContent.drawContent() }
+            else -> this@onDrawWithContent.drawContent()
+        }
+    }
+}
+
 /**
  * 连续曲率形状专用描边。
  *
@@ -102,9 +129,14 @@ class SmoothCornerShape(
  */
 fun Modifier.smoothBorder(strokeWidth: Dp, color: Color, shape: Shape): Modifier =
     this.drawWithCache {
-        val path = (shape.createOutline(size, layoutDirection, this) as Outline.Generic).path
-        onDrawWithContent {
-            drawContent()
-            drawPath(path, color, style = Stroke(width = strokeWidth.toPx()))
+        if (size.isEmpty()) {
+            onDrawWithContent { drawContent() }
+        } else {
+            val path = (shape.createOutline(size, layoutDirection, this) as? Outline.Generic)?.path
+            if (path == null) onDrawWithContent { drawContent() }
+            else onDrawWithContent {
+                drawContent()
+                drawPath(path, color, style = Stroke(width = strokeWidth.toPx()))
+            }
         }
     }

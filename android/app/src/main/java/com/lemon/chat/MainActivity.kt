@@ -80,7 +80,8 @@ class MainActivity : ComponentActivity() {
             oldHandler?.uncaughtException(t, e)
         }
         enableEdgeToEdge()
-        LemonLog.log("app", "onCreate 启动")
+        LemonLog.clear()
+        LemonLog.log("app", "onCreate v0.3.7 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
 // ══════════════ 登录 / 注册（已对接后端） ══════════════
 @Composable
 fun LoginScreen(onLogin: (Api.User) -> Unit) {
+    Dbg("LoginScreen")
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var isRegister by remember { mutableStateOf(false) }
@@ -172,7 +174,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
             Spacer(Modifier.height(26.dp))
             Button(
                 onClick = { banDays = 0 },
-                shape = LemonShapes.pill,
+                shape = LemonShapes.matPill,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White)
             ) { Text("返回登录", color = Color(0xFFD64545), fontWeight = FontWeight.SemiBold) }
         }
@@ -195,7 +197,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
             Box(
                 Modifier
                     .size(96.dp)
-                    .clip(LemonShapes.card)
+                    .squircleClip(LemonShapes.card)
                     .background(Brush.linearGradient(listOf(LemonColors.Green, LemonColors.GreenDark))),
                 contentAlignment = Alignment.Center
             ) { Text("🍋", fontSize = 48.sp) }
@@ -221,7 +223,7 @@ fun LoginScreen(onLogin: (Api.User) -> Unit) {
                 onClick = { submit() },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = LemonShapes.pill,
+                shape = LemonShapes.matPill,
                 colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green)
             ) {
                 if (busy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
@@ -302,7 +304,7 @@ fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChang
         onValueChange = onChange,
         placeholder = { Text(hint, fontSize = 14.sp, color = LemonColors.TextSub) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
-        shape = LemonShapes.input,
+        shape = LemonShapes.matInput,
         singleLine = true,
         visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation()
         else androidx.compose.ui.text.input.VisualTransformation.None,
@@ -318,6 +320,7 @@ fun LemonField(hint: String, value: String, isPassword: Boolean = false, onChang
 // ══════════════ 主界面 ══════════════
 @Composable
 fun MainScreen(me: Api.User, onLogout: () -> Unit) {
+    Dbg("MainScreen")
     var tab by remember { mutableStateOf(0) }
     var chattingWith by remember { mutableStateOf<Api.User?>(null) }
     // 群聊导航栈：进小群=压栈，返回=弹回上一个群（小群→上群→团队页）
@@ -396,6 +399,7 @@ fun MainScreen(me: Api.User, onLogout: () -> Unit) {
 // ══════════════ 消息页：会话列表 ══════════════
 @Composable
 fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
+    Dbg("MessagesPage")
     var conversations by remember { mutableStateOf<List<Api.Conversation>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
@@ -449,7 +453,7 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(48.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                            Modifier.size(48.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
                             contentAlignment = Alignment.Center
                         ) { Text(c.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green) }
                         Spacer(Modifier.width(12.dp))
@@ -471,6 +475,7 @@ fun MessagesPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
 // ══════════════ 单聊窗口（新版） ══════════════
 @Composable
 fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
+    Dbg("ChatScreen peer=${peer.nickname}")
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.Message>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
@@ -633,6 +638,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
 // ══════════════ 通讯录：好友列表 + 搜索加好友 ══════════════
 @Composable
 fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
+    Dbg("ContactsPage")
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var friends by remember { mutableStateOf<List<Api.User>>(emptyList()) }
@@ -692,7 +698,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                 item {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
-                            .clip(LemonShapes.card).background(Color(0xFFEAF6FF))
+                            .squircleClip(LemonShapes.card).background(Color(0xFFEAF6FF))
                             .clickable { showRequests = true }.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -702,7 +708,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         Spacer(Modifier.weight(1f))
                         if (reqCount > 0) {
                             Box(
-                                Modifier.clip(LemonShapes.pill).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
+                                Modifier.squircleClip(LemonShapes.pill).background(Color(0xFFD64545)).padding(horizontal = 7.dp, vertical = 2.dp)
                             ) { Text("$reqCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                         }
                         Icon(Icons.Filled.ChevronRight, null, tint = LemonColors.TextSub)
@@ -738,7 +744,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
             onDismissRequest = { viewProfile = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                    Box(Modifier.size(44.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
                         contentAlignment = Alignment.Center) {
                         Text(p.nickname.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
                     }
@@ -763,7 +769,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
             },
             confirmButton = {
                 Button(onClick = { viewProfile = null; onOpenChat(p) },
-                    shape = LemonShapes.pill,
+                    shape = LemonShapes.matPill,
                     colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green)) {
                     Text("发消息", color = Color.White)
                 }
@@ -787,7 +793,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                         value = query,
                         onValueChange = { query = it },
                         placeholder = { Text("输入对方用户名") },
-                        shape = LemonShapes.input,
+                        shape = LemonShapes.matInput,
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
                     )
@@ -798,7 +804,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                                 Api.searchUsers(me.id, query.trim()).onSuccess { results = it; searched = true }
                             }
                         },
-                        shape = LemonShapes.pill,
+                        shape = LemonShapes.matPill,
                         colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("搜索") }
@@ -810,7 +816,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
-                                Modifier.size(38.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+                                Modifier.size(38.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
                                 contentAlignment = Alignment.Center
                             ) { Text(u.nickname.take(1), fontSize = 16.sp, color = LemonColors.Green) }
                             Spacer(Modifier.width(10.dp))
@@ -919,6 +925,7 @@ fun ContactsPage(me: Api.User, onOpenChat: (Api.User) -> Unit) {
 // ══════════════ 我的 ══════════════
 @Composable
 fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
+    Dbg("MePage")
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -943,7 +950,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             } else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
         } }
         Box(
-            Modifier.size(84.dp).clip(LemonShapes.pill).clickable {
+            Modifier.size(84.dp).squircleClip(LemonShapes.pill).clickable {
                 avatarPicker.launch(androidx.activity.result.PickVisualMediaRequest(
                     androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
             }.background(LemonColors.GreenLight),
@@ -964,7 +971,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         if (me.isOfficial) {
             // 官方专属认证简介卡
             Row(
-                Modifier.fillMaxWidth().clip(LemonShapes.card).background(Color(0xFFEAF6FF)).padding(14.dp),
+                Modifier.fillMaxWidth().squircleClip(LemonShapes.card).background(Color(0xFFEAF6FF)).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OfficialBadge(18)
@@ -986,7 +993,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         var notifyOn by remember { mutableStateOf(prefs.getBoolean("notify_enabled", true)) }
 
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
                 .background(Color.White).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1002,7 +1009,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             )
         }
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
                 .background(Color.White).clickable { showSecInfo = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1011,7 +1018,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
             Text("账号与密保", fontSize = 15.sp, color = LemonColors.TextMain)
         }
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
                 .background(Color.White).clickable { showAbout = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1073,7 +1080,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         }
         // 黑名单
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+            Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
                 .background(Color.White).clickable { showBlacklist = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1088,7 +1095,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .padding(vertical = 6.dp)
-                    .clip(LemonShapes.card)
+                    .squircleClip(LemonShapes.card)
                     .background(Color(0xFFEAF6FF))
                     .clickable { onOpenAdmin() }
                     .padding(16.dp),
@@ -1104,7 +1111,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         Button(
             onClick = onLogout,
             modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = LemonShapes.pill,
+            shape = LemonShapes.matPill,
             colors = ButtonDefaults.buttonColors(containerColor = Color.White)
         ) { Text("退出登录", color = LemonColors.TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(10.dp))
@@ -1112,7 +1119,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
         if (!me.isOfficial) Button(
             onClick = { showDeleteConfirm = true },
             modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = LemonShapes.pill,
+            shape = LemonShapes.matPill,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0x14D64545))
         ) { Text("注销账号", color = Color(0xFFD64545), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
         val appVer = remember { try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (_: Exception) { "?" } }
@@ -1144,6 +1151,7 @@ fun MePage(me: Api.User, onLogout: () -> Unit, onOpenAdmin: () -> Unit) {
 // ══════════════ 管理后台（官方号专属） ══════════════
 @Composable
 fun AdminPage(me: Api.User, onBack: () -> Unit) {
+    Dbg("AdminPage")
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<Api.AdminStats?>(null) }
@@ -1181,10 +1189,10 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
                 items(st.users) { u ->
                     Column(
                         Modifier.fillMaxWidth().padding(vertical = 5.dp)
-                            .clip(LemonShapes.card).background(Color.White).padding(14.dp)
+                            .squircleClip(LemonShapes.card).background(Color.White).padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).clip(LemonShapes.pill)
+                            Box(Modifier.size(8.dp).squircleClip(LemonShapes.pill)
                                 .background(if (u.online) Color(0xFF34C759) else Color(0xFFC7C7CC)))
                             Spacer(Modifier.width(8.dp))
                             if (u.isOfficial) OfficialName(u.nickname, 15)
@@ -1255,7 +1263,7 @@ fun AdminPage(me: Api.User, onBack: () -> Unit) {
 @Composable
 fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
-        modifier.clip(LemonShapes.card).background(Color.White).padding(16.dp)
+        modifier.squircleClip(LemonShapes.card).background(Color.White).padding(16.dp)
     ) {
         Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = LemonColors.Green)
         Text(label, fontSize = 12.sp, color = LemonColors.TextSub)
@@ -1304,7 +1312,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                     0 -> {
                         OutlinedTextField(value = username, onValueChange = { username = it },
                             placeholder = { Text("输入你的用户名") }, singleLine = true,
-                            shape = LemonShapes.input,
+                            shape = LemonShapes.matInput,
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
                         if (error.isNotEmpty()) Text("⚠️ $error", color = Color(0xFFD64545), fontSize = 12.sp)
                     }
@@ -1313,13 +1321,13 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(value = answer, onValueChange = { answer = it },
                             placeholder = { Text("你的密保答案") }, singleLine = true,
-                            shape = LemonShapes.input,
+                            shape = LemonShapes.matInput,
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(value = newPw, onValueChange = { newPw = it },
                             placeholder = { Text("设置新密码（至少6位）") }, singleLine = true,
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                            shape = LemonShapes.input,
+                            shape = LemonShapes.matInput,
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green))
                         if (error.isNotEmpty()) Text("⚠️ $error", color = Color(0xFFD64545), fontSize = 12.sp)
                     }
@@ -1341,7 +1349,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                         }
                     }
                 },
-                shape = LemonShapes.pill,
+                shape = LemonShapes.matPill,
                 colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green)
             ) { Text(if (step == 0) "下一步" else if (step == 1) "重置密码" else "完成", color = Color.White) }
         },
@@ -1354,6 +1362,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
 // ══════════════ 团队页：群列表 ══════════════
 @Composable
 fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
+    Dbg("TeamsPage")
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var groups by remember { mutableStateOf<List<Api.Group>>(emptyList()) }
@@ -1409,7 +1418,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                 items(groups.size) { i ->
                     val g = groups[i]
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(LemonShapes.card)
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp).squircleClip(LemonShapes.card)
                             .background(Color.White)
                             .pointerInput(g.id) {
                                 detectTapGestures(
@@ -1420,7 +1429,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(46.dp).clip(LemonShapes.pill).background(
+                            Modifier.size(46.dp).squircleClip(LemonShapes.pill).background(
                                 if (g.gtype == "team") Color(0xFF34A853) else LemonColors.GreenLight
                             ),
                             contentAlignment = Alignment.Center
@@ -1432,7 +1441,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                                 if (g.gtype == "team") {
                                     Spacer(Modifier.width(6.dp))
                                     Text("团队", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clip(LemonShapes.pill).background(Color(0xFF34A853)).padding(horizontal = 5.dp, vertical = 1.dp))
+                                        modifier = Modifier.squircleClip(LemonShapes.pill).background(Color(0xFF34A853)).padding(horizontal = 5.dp, vertical = 1.dp))
                                 }
                             }
                             Text("群号 ${g.id} · ${g.members} 人", fontSize = 12.sp, color = LemonColors.TextSub)
@@ -1469,7 +1478,7 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("normal" to "普通群聊", "team" to "团队群聊").forEach { (t, label) ->
                             Box(
-                                Modifier.clip(LemonShapes.pill)
+                                Modifier.squircleClip(LemonShapes.pill)
                                     .background(if (newGtype == t) LemonColors.Green else Color(0xFFEDF3EF))
                                     .clickable { newGtype = t }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -1592,7 +1601,8 @@ fun TeamsPage(me: Api.User, onOpenGroup: (Api.Group) -> Unit) {
 // ══════════════ 群聊窗口 ══════════════
 // ══════════════ 群聊窗口（新版） ══════════════
 @Composable
-fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGroup: (Api.Group) -> Unit = {}) {
+fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGroup: (Api.Group) -> Unit = {
+    Dbg("GroupChatScreen gid=${group.id}")}) {
     val scope = rememberCoroutineScope()
     var messages by remember { mutableStateOf<List<Api.GroupMessage>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
@@ -1639,7 +1649,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                     Text(group.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LemonColors.TextMain)
                     if (group.gtype != "normal") {
                         Spacer(Modifier.width(6.dp))
-                        Box(Modifier.clip(LemonShapes.pill).background(LemonColors.GreenLight).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                        Box(Modifier.squircleClip(LemonShapes.pill).background(LemonColors.GreenLight).padding(horizontal = 6.dp, vertical = 1.dp)) {
                             Text(gtypeLabel(group.gtype), fontSize = 10.sp, color = LemonColors.Green, fontWeight = FontWeight.SemiBold)
                         }
                     }
@@ -1774,7 +1784,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                 OutlinedTextField(
                     value = uname, onValueChange = { uname = it },
                     label = { Text("对方用户名") },
-                    shape = LemonShapes.input, singleLine = true,
+                    shape = LemonShapes.matInput, singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
                 )
             },
@@ -1899,6 +1909,7 @@ fun GroupRequestsDialog(me: Api.User, group: Api.Group, onDismiss: () -> Unit) {
 // 头像：有图显示图，没图显示首字圆块
 @Composable
 fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official: Boolean = false) {
+    LemonLog.once("avatar $userId", "compose", "Avatar uid=$userId size=$size hasImg=${avatar.startsWith("data:image/")}")
     val bmp = remember(avatar) {
         if (avatar.startsWith("data:image/")) {
             runCatching {
@@ -1908,7 +1919,7 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
         } else null
     }
     Box(
-        Modifier.size(size.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight),
+        Modifier.size(size.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight),
         contentAlignment = Alignment.Center
     ) {
         if (bmp != null) {
@@ -1920,8 +1931,18 @@ fun AvatarImg(userId: Int, fallback: String, avatar: String, size: Int, official
 }
 
 // ── LemonLog：写 /sdcard/lemonchat_log.txt 供 Log-LC 查看 ──
+// 每次进程启动自动清空重写（旧日志不残留误导）；同 key 只报一次用 once()。
 object LemonLog {
     @Volatile var enabled = true
+    private val seen = java.util.Collections.synchronizedSet(HashSet<String>())
+    fun clear() {
+        seen.clear()
+        try {
+            java.io.File(android.os.Environment.getExternalStorageDirectory(), "lemonchat_log.txt").delete()
+            // 旧崩溃日志也一并清掉，避免新旧混淆
+            java.io.File(android.os.Environment.getExternalStorageDirectory(), "lemonchat_crash.txt").delete()
+        } catch (_: Exception) {}
+    }
     fun log(tag: String, msg: String) {
         if (!enabled) return
         try {
@@ -1929,6 +1950,19 @@ object LemonLog {
             val ts = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.CHINA).format(java.util.Date())
             f.appendText("[$ts][$tag] $msg\n")
         } catch (_: Exception) {}
+    }
+    // 同 key 只记一次（探针防刷屏）
+    fun once(key: String, tag: String, msg: String) {
+        if (seen.add(key)) log(tag, msg)
+    }
+}
+
+// ── 组件探针：进入/退出即上报（原组件名，英文）──
+@Composable
+fun Dbg(name: String) {
+    androidx.compose.runtime.DisposableEffect(name) {
+        LemonLog.log("compose", "ENTER $name")
+        onDispose { LemonLog.log("compose", "EXIT  $name") }
     }
 }
 
@@ -1962,6 +1996,7 @@ fun saveDataUrlToGallery(ctx: android.content.Context, dataUrl: String): Boolean
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MsgContent(content: String, mine: Boolean) {
+    val _t = if (content.startsWith("data:image/")) "img" else if (content.startsWith("data:video/")) "video" else "text"; LemonLog.once("msg ${content.hashCode()}", "compose", "MsgContent type=$_t len=${content.length} mine=$mine")
     val ctx = LocalContext.current
     var showPreview by remember { mutableStateOf(false) }
     when {
@@ -1977,7 +2012,7 @@ fun MsgContent(content: String, mine: Boolean) {
                 Image(
                     bmp, null,
                     Modifier.widthIn(max = 200.dp).heightIn(max = 260.dp).fillMaxWidth()
-                        .clip(LemonShapes.card)
+                        .squircleClip(LemonShapes.card)
                         .combinedClickable(
                             onClick = { showPreview = true },
                             onLongClick = {
@@ -2042,6 +2077,7 @@ fun compressImage(ctx: android.content.Context, uri: Uri): String? {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, sending: Boolean) {
+    Dbg("ChatInputRow")
     val ctx = LocalContext.current
     val videoLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
@@ -2088,7 +2124,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
             value = input, onValueChange = { input = it },
             placeholder = { Text("说点什么…", fontSize = 14.sp, color = LemonColors.TextSub) },
             modifier = Modifier.weight(1f),
-            shape = LemonShapes.pill,
+            shape = LemonShapes.matPill,
             maxLines = 4,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = LemonColors.Green,
@@ -2100,7 +2136,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
         Spacer(Modifier.width(8.dp))
         Button(
             onClick = { val t = input.trim(); if (t.isNotEmpty() && !sending) { onSendText(t); input = "" } },
-            shape = LemonShapes.pill,
+            shape = LemonShapes.matPill,
             colors = ButtonDefaults.buttonColors(containerColor = LemonColors.Green),
             modifier = Modifier.size(48.dp),
             contentPadding = PaddingValues(0.dp)
@@ -2118,7 +2154,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 val file = java.io.File(ctx.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
                                 val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
@@ -2132,7 +2168,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 showPanel = false
                                 albumLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
@@ -2144,7 +2180,7 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(56.dp).clip(LemonShapes.pill).background(LemonColors.GreenLight)
+                        Modifier.size(56.dp).squircleClip(LemonShapes.pill).background(LemonColors.GreenLight)
                             .clickable {
                                 showPanel = false
                                 videoLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
@@ -2177,7 +2213,7 @@ fun FriendRequestDialog(me: Api.User, targetUsername: String, onDismiss: () -> U
                 OutlinedTextField(
                     value = msg, onValueChange = { msg = it },
                     label = { Text("申请信息") },
-                    shape = LemonShapes.input, singleLine = true,
+                    shape = LemonShapes.matInput, singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
                 )
             }
@@ -2242,7 +2278,7 @@ fun ChildrenDialog(me: Api.User, rootId: Long, onDismiss: () -> Unit, onOpenGrou
                                 Text(
                                     gtypeLabel(g.gtype), fontSize = 9.sp,
                                     color = Color.White, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clip(LemonShapes.pill)
+                                    modifier = Modifier.squircleClip(LemonShapes.pill)
                                         .background(if (g.gtype == "temp") Color(0xFFFF9800) else LemonColors.Green)
                                         .padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
@@ -2305,7 +2341,7 @@ fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("dept" to "部门群", "sub" to "小组群", "temp" to "临时群").forEach { (t, label) ->
                         Box(
-                            Modifier.clip(LemonShapes.pill)
+                            Modifier.squircleClip(LemonShapes.pill)
                                 .background(if (gtype == t) LemonColors.Green else Color(0xFFEDF3EF))
                                 .clickable { gtype = t }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -2316,7 +2352,7 @@ fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
                     label = { Text("群名称") },
-                    shape = LemonShapes.input, singleLine = true,
+                    shape = LemonShapes.matInput, singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LemonColors.Green)
                 )
                 if (gtype == "temp") {
@@ -2325,7 +2361,7 @@ fun CreateChildDialog(me: Api.User, parent: Api.Group, onDismiss: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         ttlOptions.forEach { (d, label) ->
                             Box(
-                                Modifier.clip(LemonShapes.pill)
+                                Modifier.squircleClip(LemonShapes.pill)
                                     .background(if (ttl == d) LemonColors.Green else Color(0xFFEDF3EF))
                                     .clickable { ttl = d }
                                     .padding(horizontal = 8.dp, vertical = 5.dp)

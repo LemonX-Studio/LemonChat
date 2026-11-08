@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import com.lemon.chat.Dbg
+import com.lemon.chat.ui.*
 import com.lemon.chat.ui.SmoothCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -33,6 +35,7 @@ fun FloatingTabBar(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    Dbg("FloatingTabBar")
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()

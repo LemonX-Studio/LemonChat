@@ -29,6 +29,12 @@ object LemonShapes {
     val input = SmoothCornerShape(14.dp)
     // 胶囊/圆头像：超大半径 → 锚点顶满短边一半，曲率连续的 squircle 胶囊
     val pill = SmoothCornerShape(1000.dp)
+
+    // Material 组件内部走 RenderNode outline 裁剪通道，安卓 9 上对自绘曲线
+    // 路径会静默裁没内容。先回退普通圆角保可用，问题确认后统一恢复。
+    val matCard = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    val matInput = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    val matPill = androidx.compose.foundation.shape.RoundedCornerShape(50)
 }
 
 @Composable
