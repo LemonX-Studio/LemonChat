@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 
 import androidx.compose.foundation.Image
@@ -15,6 +16,13 @@ import androidx.compose.material3.ModalBottomSheet
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
@@ -90,7 +98,7 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         LemonLog.clear()
-        LemonLog.log("app", "onCreate v0.4.3 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
+        LemonLog.log("app", "onCreate v0.4.4 sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
         // 启动即检查权限：未被用户明确拒绝的都当场申请（相机拍照用）
         val need = listOf(
             android.Manifest.permission.CAMERA,
@@ -570,7 +578,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                                 )
                                 .background(if (mine) LemonColors.Green else Color.White)
                                 .padding(horizontal = 12.dp, vertical = 9.dp)
-                        ) { MsgContent(m.content, mine) }
+                        ) { MsgContent(m.content, mine, messages.map { it.content }.filter { it.startsWith("data:image/") || it.startsWith("data:video/") }) }
                         if (mine) {
                             Spacer(Modifier.width(8.dp))
                             AvatarImg(me.id, me.nickname, myAvatar, 34, me.isOfficial)
@@ -1730,7 +1738,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                                     )
                                     .background(if (mine) LemonColors.Green else Color.White)
                                     .padding(horizontal = 12.dp, vertical = 9.dp)
-                            ) { MsgContent(m.content, mine) }
+                            ) { MsgContent(m.content, mine, messages.map { it.content }.filter { it.startsWith("data:image/") || it.startsWith("data:video/") }) }
                         }
                         if (mine) {
                             Spacer(Modifier.width(8.dp))
@@ -2002,69 +2010,107 @@ fun saveDataUrlToGallery(ctx: android.content.Context, dataUrl: String): Boolean
     }.getOrDefault(false)
 }
 
-// 全屏媒体预览：上下虚化遮罩，点背景关闭
+// 全屏媒体预览：左右滑动切换、双指缩放、系统返回键退出、长按询问保存
 @Composable
-fun BlurStrip(bmp: androidx.compose.ui.graphics.ImageBitmap, top: Boolean) {
-    Box(Modifier.fillMaxWidth().height(120.dp)) {
-        Image(bmp, null, Modifier.fillMaxSize().blur(24.dp), contentScale = ContentScale.Crop)
-        Box(Modifier.fillMaxSize().background(if (top)
-            Brush.verticalGradient(listOf(Color(0xCC000000), Color(0x00000000)))
-            else Brush.verticalGradient(listOf(Color(0x00000000), Color(0xCC000000)))))
+fun ZoomableMediaImage(dataUrl: String, onLongPress: () -> Unit) {
+    val bmp = remember(dataUrl) {
+        runCatching {
+            val bytes = android.util.Base64.decode(dataUrl.substringAfter("base64,"), android.util.Base64.DEFAULT)
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }.getOrNull()
+    } ?: return
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val tf = rememberTransformableState { zoom, pan, _ ->
+        scale = (scale * zoom).coerceIn(1f, 5f)
+        offset = if (scale > 1f) offset + pan else Offset.Zero
     }
+    Image(
+        bmp, null,
+        Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y)
+            .transformable(tf)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { scale = 1f; offset = Offset.Zero },
+                    onLongPress = { onLongPress() }
+                )
+            },
+        contentScale = ContentScale.Fit
+    )
 }
 
 @Composable
-fun FullscreenMediaPreview(bmp: androidx.compose.ui.graphics.ImageBitmap?, videoDataUrl: String?, onDismiss: () -> Unit) {
+fun FullscreenMediaPreview(media: List<String>, initialIndex: Int, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    var videoFile by remember { mutableStateOf<java.io.File?>(null) }
-    val frame = remember(bmp, videoDataUrl) {
-        bmp ?: runCatching {
-            val bytes = android.util.Base64.decode(videoDataUrl!!.substringAfter("base64,"), android.util.Base64.DEFAULT)
-            val f = java.io.File(ctx.cacheDir, "lp_${System.currentTimeMillis()}.mp4"); f.writeBytes(bytes)
-            val mmr = android.media.MediaMetadataRetriever()
-            mmr.setDataSource(f.absolutePath)
-            val fr = mmr.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.asImageBitmap()
-            mmr.release()
-            videoFile = f
-            fr
-        }.getOrNull()
-    }
+    val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, (media.size - 1).coerceAtLeast(0))) { media.size }
+    var showSave by remember { mutableStateOf(false) }
+    BackHandler { onDismiss() }
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onDismiss() },
-            contentAlignment = Alignment.Center
-        ) {
-            if (frame != null) {
-                Image(frame, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                Column(Modifier.fillMaxSize()) {
-                    BlurStrip(frame, top = true)
-                    Spacer(Modifier.weight(1f))
-                    BlurStrip(frame, top = false)
-                }
-                if (videoDataUrl != null) {
-                    Surface(shape = CircleShape, color = Color(0x66000000)) {
-                        IconButton(onClick = {
-                            videoFile?.let { f ->
-                                runCatching {
-                                    val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
-                                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, "video/mp4")
-                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    })
-                                }.onFailure { LemonLog.log("video", "播放失败 ${it.message}") }
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            HorizontalPager(state = pagerState) { page ->
+                val c = media[page]
+                if (c.startsWith("data:image/")) {
+                    ZoomableMediaImage(c) { showSave = true }
+                } else {
+                    // 视频：显示首帧 + 播放按钮 + 长按保存
+                    val frame = remember(c) {
+                        runCatching {
+                            val bytes = android.util.Base64.decode(c.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                            val f = java.io.File(ctx.cacheDir, "lp_${System.currentTimeMillis()}.mp4"); f.writeBytes(bytes)
+                            f.setReadable(true, false)
+                            val mmr = android.media.MediaMetadataRetriever()
+                            mmr.setDataSource(f.absolutePath)
+                            val fr = mmr.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.asImageBitmap()
+                            mmr.release()
+                            fr to f
+                        }.getOrNull()
+                    }
+                    Box(Modifier.fillMaxSize().pointerInput(c) {
+                        detectTapGestures(onLongPress = { showSave = true })
+                    }, contentAlignment = Alignment.Center) {
+                        when {
+                            frame == null -> Text("加载失败", color = Color.White, fontSize = 15.sp)
+                            else -> {
+                                Image(frame.first, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                Surface(shape = CircleShape, color = Color(0x66000000)) {
+                                    IconButton(onClick = {
+                                        runCatching {
+                                            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", frame.second)
+                                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                setDataAndType(uri, "video/mp4")
+                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            })
+                                        }.onFailure { LemonLog.log("video", "播放失败 ${it.message}") }
+                                    }) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(64.dp)) }
+                                }
                             }
-                        }) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(64.dp)) }
+                        }
                     }
                 }
-            } else Text("加载失败", color = Color.White, fontSize = 15.sp)
+            }
+            if (media.size > 1) Text(
+                "${pagerState.currentPage + 1}/${media.size}",
+                color = Color.White, fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp)
+            )
         }
     }
+    if (showSave) LemonConfirmSave(
+        onConfirm = {
+            showSave = false
+            val c = media.getOrNull(pagerState.currentPage) ?: return@LemonConfirmSave
+            if (saveDataUrlToGallery(ctx, c))
+                Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+        },
+        onDismiss = { showSave = false }
+    )
 }
 
 // 保存确认弹窗：上面取消、下面确定
@@ -2085,7 +2131,7 @@ fun LemonConfirmSave(onConfirm: () -> Unit, onDismiss: () -> Unit) {
 // 消息内容：文本 / 图片 / 视频（长按=询问是否保存，不直接保存）
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MsgContent(content: String, mine: Boolean) {
+fun MsgContent(content: String, mine: Boolean, media: List<String> = listOf(content)) {
     val _t = if (content.startsWith("data:image/")) "img" else if (content.startsWith("data:video/")) "video" else "text"; LemonLog.once("msg ${content.hashCode()}", "compose", "MsgContent type=$_t len=${content.length} mine=$mine")
     val ctx = LocalContext.current
     var showPreview by remember { mutableStateOf(false) }
@@ -2122,13 +2168,8 @@ fun MsgContent(content: String, mine: Boolean) {
         else -> Text(content, color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
     }
     if (showPreview) FullscreenMediaPreview(
-        bmp = if (content.startsWith("data:image/")) {
-            runCatching {
-                val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            }.getOrNull()
-        } else null,
-        videoDataUrl = if (content.startsWith("data:video/")) content else null,
+        media = media,
+        initialIndex = media.indexOf(content).coerceAtLeast(0),
         onDismiss = { showPreview = false }
     )
     if (showSave) LemonConfirmSave(
