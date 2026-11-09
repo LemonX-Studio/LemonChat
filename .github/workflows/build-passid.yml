@@ -27,7 +27,7 @@ jobs:
           gradle-version: '8.7'
 
       - name: Restore signing key
-        run: echo "${ secrets.LEMON_JKS_B64 }" | base64 -d > PassID/app/lemonchat.jks
+        run: echo "${{ secrets.LEMON_JKS_B64 }}" | base64 -d > PassID/app/lemonchat.jks
 
       - name: Build APK
         working-directory: PassID

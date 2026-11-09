@@ -25,7 +25,7 @@ on:
           cache-disabled: false
 
       - name: Restore signing key
-        run: echo "${ secrets.LEMON_JKS_B64 }" | base64 -d > android/lemonchat.jks
+        run: echo "${{ secrets.LEMON_JKS_B64 }}" | base64 -d > android/lemonchat.jks
 
       - name: Build APK
         working-directory: android
