@@ -24,9 +24,14 @@ on:
           gradle-version: '8.7'
           cache-disabled: false
 
+      - name: Restore signing key
+        run: echo "${ secrets.LEMON_JKS_B64 }" | base64 -d > android/lemonchat.jks
+
       - name: Build APK
         working-directory: android
         run: gradle assembleRelease --no-daemon
+        env:
+          JKS_PASS: ${{ secrets.JKS_PASS }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

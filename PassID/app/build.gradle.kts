@@ -19,9 +19,9 @@ android {
         create("release") {
             // 与 Lemon Chat 同一套签名
             storeFile = file("lemonchat.jks")
-            storePassword = "lemonchat2026"
+            storePassword = System.getenv("JKS_PASS") ?: ""
             keyAlias = "LemonChat"
-            keyPassword = "lemonchat2026"
+            keyPassword = System.getenv("JKS_PASS") ?: ""
         }
     }
 

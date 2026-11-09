@@ -19,9 +19,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("../lemonchat.jks")
-            storePassword = "lemonchat2026"
+            storePassword = System.getenv("JKS_PASS") ?: ""
             keyAlias = "LemonChat"
-            keyPassword = "lemonchat2026"
+            keyPassword = System.getenv("JKS_PASS") ?: ""
         }
     }
 
