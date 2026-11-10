@@ -4,7 +4,7 @@ on:
     branches: [ main ]
     paths:
       - 'LogLC/**'
-      - '.github/workflows/build-passid.yml'
+      - '.github/workflows/build-loglc.yml'
   workflow_dispatch:
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
         run: echo "${{ secrets.LEMON_JKS_B64 }}" | base64 -d > LogLC/app/lemonchat.jks
 
       - name: Build APK
-        working-directory: PassID
+        working-directory: LogLC
         run: gradle assembleRelease --no-daemon
         env:
           JKS_PASS: ${{ secrets.JKS_PASS }}
