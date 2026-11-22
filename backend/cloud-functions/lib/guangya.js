@@ -28,41 +28,66 @@ export function guangyaDid(env) {
   return env.GUANGYA_DID || "lemonchat-worker-0001";
 }
 
-// 刷新 access_token（带 5 分钟提前量）
+// 刷新 access_token（带 5 分钟提前量；CF 出口 IP 可能被光鸭风控间歇拦截，带重试）
 export async function getAccessToken(env, force = false) {
   const now = Date.now() / 1000;
   if (!force && _tok.token && now < _tok.exp - 300) return _tok.token;
-  const r = await fetch(`${ACCOUNT_BASE}/v1/auth/token`, {
-    method: "POST",
-    headers: { ...baseHeaders(guangyaDid(env)), "x-action": "401" },
-    body: JSON.stringify({
-      client_id: CLIENT_ID,
-      grant_type: "refresh_token",
-      refresh_token: env.GUANGYA_REFRESH_TOKEN,
-    }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!d.access_token) throw new Error("光鸭刷新失败: " + JSON.stringify(d).slice(0, 200));
-  _tok = { token: d.access_token, exp: d.expires_in ? now + d.expires_in : now + 3500 };
-  return _tok.token;
+  let lastErr = "";
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await fetch(`${ACCOUNT_BASE}/v1/auth/token`, {
+        signal: AbortSignal.timeout(10000),
+        method: "POST",
+        headers: { ...baseHeaders(guangyaDid(env)), "x-action": "401" },
+        body: JSON.stringify({
+          client_id: CLIENT_ID,
+          grant_type: "refresh_token",
+          refresh_token: env.GUANGYA_REFRESH_TOKEN,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.access_token) {
+        _tok = { token: d.access_token, exp: d.expires_in ? now + d.expires_in : now + 3500 };
+        return _tok.token;
+      }
+      lastErr = `refresh status=${r.status} body=${JSON.stringify(d).slice(0, 150)}`;
+    } catch (e) {
+      lastErr = "refresh 网络错误: " + (e?.message || e);
+    }
+    await new Promise((res) => setTimeout(res, 800 * (i + 1)));
+  }
+  throw new Error("光鸭刷新失败: " + lastErr);
 }
 
-// 带鉴权的 API 请求，401 自动刷新重试一次
+// 带鉴权的 API 请求，401 自动刷新重试一次；空响应/异常重试最多 3 次
 export async function guangyaApi(env, path, body) {
   const did = guangyaDid(env);
   const call = async (token) =>
     fetch(`${API_BASE}${path}`, {
+      signal: AbortSignal.timeout(10000),
       method: "POST",
       headers: { ...baseHeaders(did), authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     });
-  let token = await getAccessToken(env);
-  let r = await call(token);
-  if (r.status === 401) {
-    token = await getAccessToken(env, true);
-    r = await call(token);
+  let lastErr = "";
+  for (let i = 0; i < 3; i++) {
+    let token = await getAccessToken(env, i > 0);
+    let r = await call(token);
+    if (r.status === 401) {
+      token = await getAccessToken(env, true);
+      r = await call(token);
+    }
+    const text = await r.text().catch(() => "");
+    try {
+      const d = JSON.parse(text || "{}");
+      if (d && typeof d === "object" && (d.msg || d.code !== undefined)) return d;
+      lastErr = `status=${r.status} body=${text.slice(0, 100)}`;
+    } catch {
+      lastErr = `status=${r.status} body=${text.slice(0, 100)}`;
+    }
+    await new Promise((res) => setTimeout(res, 600 * (i + 1)));
   }
-  return r.json().catch(() => ({}));
+  throw new Error(`光鸭API响应异常(已重试3次) ${lastErr}`);
 }
 
 // 取上传凭证（APP 直传 OSS 用）

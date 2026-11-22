@@ -202,9 +202,26 @@ class LemonMedia {
             ).also { if (contentMd5.isNotEmpty()) it["Content-MD5"] = contentMd5 }
         }
 
+        private suspend fun <T> retry(times: Int, block: suspend () -> T): T {
+            var last: Exception? = null
+            repeat(times) { i ->
+                try {
+                    return block()
+                } catch (e: UploadException) {
+                    throw e   // 用户可见的业务错误（太大/格式不支持）不重试
+                } catch (e: Exception) {
+                    last = e; delay(1500L * (i + 1))
+                }
+            }
+            throw last ?: UploadException("重试耗尽")
+        }
+
         private suspend fun upload(p: Prepared, isVideo: Boolean): String {
-            val token = Api.mediaToken(p.name, p.bytes.size, if (p.bytes.size < MULTIPART_THRESHOLD) md5B64(p.bytes) else null, isVideo)
-                .getOrElse { throw UploadException("服务器取凭证失败: ${it.message}") }
+            // 光鸭对 Worker 出口 IP 间歇风控：取凭证/确认/取链接均带 APP 端重试兜底
+            val token = retry(5) {
+                Api.mediaToken(p.name, p.bytes.size, if (p.bytes.size < MULTIPART_THRESHOLD) md5B64(p.bytes) else null, isVideo)
+                    .getOrElse { throw UploadException("服务器取凭证失败: ${it.message}") }
+            }
             val base = token.getString("fullEndPoint") + "/" + token.getString("objectPath")
             val creds = token.getJSONObject("creds")
             val ak = creds.getString("accessKeyID")
@@ -291,7 +308,9 @@ class LemonMedia {
         private suspend fun freshUrl(fileId: String, force: Boolean = false): String {
             val now = System.currentTimeMillis() / 1000
             if (!force) urlCache[fileId]?.let { (u, exp) -> if (exp - 600 > now) return u }
-            val r = Api.mediaUrl(fileId).getOrElse { throw Exception("取下载链接失败: ${it.message}") }
+            val r = retry(5) {
+                Api.mediaUrl(fileId).getOrElse { throw Exception("取下载链接失败: ${it.message}") }
+            }
             val url = r.getString("url")
             val duration = r.optLong("duration", 21600)
             urlCache[fileId] = url to (now + duration)
