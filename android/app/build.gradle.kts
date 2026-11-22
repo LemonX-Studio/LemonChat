@@ -12,8 +12,8 @@ android {
         applicationId = "com.lemon.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 41
-        versionName = "0.4.4"
+        versionCode = 42
+        versionName = "0.5.0"
     }
 
     signingConfigs {

@@ -64,6 +64,7 @@ import com.lemon.chat.ui.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -578,7 +579,7 @@ fun ChatScreen(me: Api.User, peer: Api.User, onBack: () -> Unit) {
                                 )
                                 .background(if (mine) LemonColors.Green else Color.White)
                                 .padding(horizontal = 12.dp, vertical = 9.dp)
-                        ) { MsgContent(m.content, mine, messages.map { it.content }.filter { it.startsWith("data:image/") || it.startsWith("data:video/") }) }
+                        ) { MsgContent(m.content, mine, messages.map { it.content }.filter { LemonMedia.isMedia(it) }) }
                         if (mine) {
                             Spacer(Modifier.width(8.dp))
                             AvatarImg(me.id, me.nickname, myAvatar, 34, me.isOfficial)
@@ -1738,7 +1739,7 @@ fun GroupChatScreen(me: Api.User, group: Api.Group, onBack: () -> Unit, onOpenGr
                                     )
                                     .background(if (mine) LemonColors.Green else Color.White)
                                     .padding(horizontal = 12.dp, vertical = 9.dp)
-                            ) { MsgContent(m.content, mine, messages.map { it.content }.filter { it.startsWith("data:image/") || it.startsWith("data:video/") }) }
+                            ) { MsgContent(m.content, mine, messages.map { it.content }.filter { LemonMedia.isMedia(it) }) }
                         }
                         if (mine) {
                             Spacer(Modifier.width(8.dp))
@@ -1985,8 +1986,8 @@ fun Dbg(name: String) {
 
 // 会话列表预览：多媒体消息显示摘要而不是 base64 长串
 fun previewOf(content: String): String = when {
-    content.startsWith("data:image/") -> "[图片]"
-    content.startsWith("data:video/") -> "[视频]"
+    content.startsWith("data:image/") || LemonMedia.isImage(content) -> "[图片]"
+    content.startsWith("data:video/") || LemonMedia.isVideo(content) -> "[视频]"
     else -> content
 }
 
@@ -2013,12 +2014,17 @@ fun saveDataUrlToGallery(ctx: android.content.Context, dataUrl: String): Boolean
 // 全屏媒体预览：左右滑动切换、双指缩放、系统返回键退出、长按询问保存
 @Composable
 fun ZoomableMediaImage(dataUrl: String, onLongPress: () -> Unit) {
-    val bmp = remember(dataUrl) {
-        runCatching {
-            val bytes = android.util.Base64.decode(dataUrl.substringAfter("base64,"), android.util.Base64.DEFAULT)
-            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-        }.getOrNull()
-    } ?: return
+    val ctx = LocalContext.current
+    val bmpState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, dataUrl) {
+        value = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                LemonMedia.loadBytes(ctx, dataUrl)?.let { b ->
+                    android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.asImageBitmap()
+                }
+            }.getOrNull()
+        }
+    }
+    val bmp = bmpState.value ?: return
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val tf = rememberTransformableState { zoom, pan, _ ->
@@ -2055,29 +2061,32 @@ fun FullscreenMediaPreview(media: List<String>, initialIndex: Int, onDismiss: ()
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             HorizontalPager(state = pagerState) { page ->
                 val c = media[page]
-                if (c.startsWith("data:image/")) {
+                if (LemonMedia.isImage(c)) {
                     ZoomableMediaImage(c) { showSave = true }
                 } else {
                     // 视频：显示首帧 + 播放按钮 + 长按保存
-                    val frame = remember(c) {
-                        runCatching {
-                            val bytes = android.util.Base64.decode(c.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                            val f = java.io.File(ctx.cacheDir, "lp_${System.currentTimeMillis()}.mp4"); f.writeBytes(bytes)
-                            f.setReadable(true, false)
-                            val mmr = android.media.MediaMetadataRetriever()
-                            mmr.setDataSource(f.absolutePath)
-                            val fr = mmr.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.asImageBitmap()
-                            mmr.release()
-                            if (fr != null) fr to f else null
-                        }.getOrNull()
+                    val frameState = produceState<Pair<android.graphics.Bitmap, java.io.File>?>(initialValue = null, c) {
+                        value = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching {
+                                val bytes = LemonMedia.loadBytes(ctx, c) ?: return@withContext null
+                                val f = java.io.File(ctx.cacheDir, "lp_${LemonMedia.refOf(c)?.fileId ?: System.currentTimeMillis()}.mp4")
+                                f.writeBytes(bytes); f.setReadable(true, false)
+                                val mmr = android.media.MediaMetadataRetriever()
+                                mmr.setDataSource(f.absolutePath)
+                                val fr = mmr.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                                mmr.release()
+                                if (fr != null) fr to f else null
+                            }.getOrNull()
+                        }
                     }
+                    val frame = frameState.value
                     Box(Modifier.fillMaxSize().pointerInput(c) {
                         detectTapGestures(onLongPress = { showSave = true })
                     }, contentAlignment = Alignment.Center) {
                         when {
                             frame == null -> Text("加载失败", color = Color.White, fontSize = 15.sp)
                             else -> {
-                                Image(frame.first, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                Image(frame.first.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                                 Surface(shape = CircleShape, color = Color(0x66000000)) {
                                     IconButton(onClick = {
                                         runCatching {
@@ -2105,9 +2114,10 @@ fun FullscreenMediaPreview(media: List<String>, initialIndex: Int, onDismiss: ()
         onConfirm = {
             showSave = false
             val c = media.getOrNull(pagerState.currentPage) ?: return@LemonConfirmSave
-            if (saveDataUrlToGallery(ctx, c))
-                Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+            saveMediaToGalleryAsync(ctx, c) { ok ->
+                if (ok) Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+            }
         },
         onDismiss = { showSave = false }
     )
@@ -2137,14 +2147,16 @@ fun MsgContent(content: String, mine: Boolean, media: List<String> = listOf(cont
     var showPreview by remember { mutableStateOf(false) }
     var showSave by remember { mutableStateOf(false) }
     when {
-        content.startsWith("data:image/") -> {
-            val bmp = remember(content) {
-                runCatching {
-                    val bytes = android.util.Base64.decode(content.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                }.onFailure { LemonLog.log("img", "解码失败 len=${content.length} ${it.message}") }
-                .getOrNull()
+        LemonMedia.isImage(content) -> {
+            val bmpState = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, content) {
+                value = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    LemonMedia.loadBytes(ctx, content)?.let { b ->
+                        runCatching { android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.asImageBitmap() }
+                            .onFailure { LemonLog.log("img", "解码失败 ${it.message}") }.getOrNull()
+                    }
+                }
             }
+            val bmp = bmpState.value
             if (bmp != null) {
                 Image(
                     bmp, null,
@@ -2153,9 +2165,9 @@ fun MsgContent(content: String, mine: Boolean, media: List<String> = listOf(cont
                         .combinedClickable(onClick = { showPreview = true }, onLongClick = { showSave = true }),
                     contentScale = ContentScale.FillWidth
                 )
-            } else Text("[图片]", color = if (mine) Color.White else LemonColors.TextMain, fontSize = 15.sp)
+            } else Text("[图片加载中…]", color = if (mine) Color.White else LemonColors.TextSub, fontSize = 15.sp)
         }
-        content.startsWith("data:video/") -> {
+        LemonMedia.isVideo(content) -> {
             Row(
                 Modifier.combinedClickable(onClick = { showPreview = true }, onLongClick = { showSave = true }),
                 verticalAlignment = Alignment.CenterVertically
@@ -2175,12 +2187,24 @@ fun MsgContent(content: String, mine: Boolean, media: List<String> = listOf(cont
     if (showSave) LemonConfirmSave(
         onConfirm = {
             showSave = false
-            if (saveDataUrlToGallery(ctx, content))
-                Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+            saveMediaToGalleryAsync(ctx, content) { ok ->
+                if (ok) Toast.makeText(ctx, "已保存到相册 LemonChat 目录", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(ctx, "保存失败", Toast.LENGTH_SHORT).show()
+            }
         },
         onDismiss = { showSave = false }
     )
+}
+
+// 保存到相册（兼容 base64 与 lemon:// 远程媒体，异步下载后写入）
+fun saveMediaToGalleryAsync(ctx: android.content.Context, content: String, onDone: (Boolean) -> Unit) {
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        val ok = runCatching {
+            if (content.startsWith("data:")) saveDataUrlToGallery(ctx, content)
+            else LemonMedia.saveToGallery(ctx, content)
+        }.getOrDefault(false)
+        withContext(kotlinx.coroutines.Dispatchers.Main) { onDone(ok) }
+    }
 }
 
 // 图片压缩 → base64 dataURL（最长边 1024，质量 70）
@@ -2209,13 +2233,11 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
         androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            // 视频走 base64（限 8MB，与图片同一发送通道）
-            val data = runCatching {
-                val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
-                if (bytes.size > 8 * 1024 * 1024) { Toast.makeText(ctx, "视频超过8MB，发不了哦", Toast.LENGTH_SHORT).show(); null }
-                else "data:video/mp4;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-            }.getOrNull()
-            if (data != null) onSendImage(data)
+            // 视频：≤200MB 直传光鸭（超过直接拒）
+            Toast.makeText(ctx, "视频上传中…", Toast.LENGTH_SHORT).show()
+            LemonMedia.sendMedia(ctx, uri, LemonMedia.displayNameOf(ctx, uri), isVideo = true,
+                onRef = { onSendImage(it) },
+                onFail = { msg -> Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show() })
         }
     }
     var input by remember { mutableStateOf("") }
@@ -2225,17 +2247,20 @@ fun ChatInputRow(onSendText: (String) -> Unit, onSendImage: (String) -> Unit, se
     val albumLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { u ->
-        val data = compressImage(ctx, u)
-        if (data != null) onSendImage(data)
-        else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
+        // 图片：按压缩规则处理后直传光鸭
+        Toast.makeText(ctx, "图片上传中…", Toast.LENGTH_SHORT).show()
+        LemonMedia.sendMedia(ctx, u, LemonMedia.displayNameOf(ctx, u), isVideo = false,
+            onRef = { onSendImage(it) },
+            onFail = { msg -> Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show() })
     } }
     val cameraLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.TakePicture()
     ) { ok ->
         if (ok) cameraUri?.let { u ->
-            val data = compressImage(ctx, u)
-            if (data != null) onSendImage(data)
-            else Toast.makeText(ctx, "图片读取失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "图片上传中…", Toast.LENGTH_SHORT).show()
+            LemonMedia.sendMedia(ctx, u, "cam_${System.currentTimeMillis()}.jpg", isVideo = false,
+                onRef = { onSendImage(it) },
+                onFail = { msg -> Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show() })
         }
     }
 

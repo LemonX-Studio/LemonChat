@@ -75,6 +75,36 @@ object Api {
     // 带错误码的异常：NOT_FRIEND / BLOCKED 等
     class ApiError(val code: String, message: String) : Exception(message)
 
+    // ============ 媒体（光鸭云盘直传方案）============
+    // POST /api/media/token {name,size,md5?,isVideo} → 上传凭证（APP 直传 OSS 用）
+    suspend fun mediaToken(name: String, size: Int, md5: String?, isVideo: Boolean): Result<JSONObject> = withContext(Dispatchers.IO) {
+        runCatching {
+            val o = JSONObject().apply {
+                put("name", name); put("size", size); put("isVideo", isVideo)
+                if (md5 != null) put("md5", md5)
+            }
+            val r = post("media/token", o)
+            if (r.optBoolean("ok")) r.getJSONObject("upload") else throw ApiError("MEDIA", r.optString("error", "取凭证失败"))
+        }
+    }
+
+    // POST /api/media/complete {taskId} → {fileId}
+    suspend fun mediaComplete(taskId: String): Result<JSONObject> = withContext(Dispatchers.IO) {
+        runCatching {
+            val r = post("media/complete", JSONObject().put("taskId", taskId))
+            if (r.optBoolean("ok")) r else throw ApiError("MEDIA", r.optString("error", "确认失败"))
+        }
+    }
+
+    // POST /api/media/url {fileId} → {url, duration}
+    suspend fun mediaUrl(fileId: String): Result<JSONObject> = withContext(Dispatchers.IO) {
+        runCatching {
+            val r = post("media/url", JSONObject().put("fileId", fileId))
+            if (r.optBoolean("ok")) r else throw ApiError("MEDIA", r.optString("error", "取链接失败"))
+        }
+    }
+
+
     // 头像内存缓存
     object AvatarStore {
         private val cache = HashMap<Int, String>()

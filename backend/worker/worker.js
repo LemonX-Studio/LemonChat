@@ -18,6 +18,7 @@ import groupmessages from "../cloud-functions/api/groupmessages.js";
 import friendrequests from "../cloud-functions/api/friendrequests.js";
 import avatar from "../cloud-functions/api/avatar.js";
 import del from "../cloud-functions/api/delete.js";
+import media from "../cloud-functions/api/media.js";
 
 const routes = {
   login,
@@ -34,6 +35,7 @@ const routes = {
   friendrequests,
   avatar,
   delete: del,
+  media,
 };
 
 export default {
